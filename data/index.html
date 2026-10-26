@@ -149,7 +149,7 @@ html[data-theme="light"] .sw input:checked + span:before{
   background:#fff
 }
 
-/* активная кнопка режима — жёлтая, как в тёмной теме */
+/* активная кнопка режима - жёлтая, как в тёмной теме */
 html[data-theme="light"] .seg button.active{
   background:#ffb020;
   color:#171103
@@ -164,7 +164,7 @@ html[data-theme="light"] input[type=range].hue::-moz-range-thumb{
   box-shadow:0 1px 3px rgba(16,20,30,.3)
 }
 
-/* обычные ползунки: полностью свои — светлый трек + жёлтое заполнение.
+/* обычные ползунки: полностью свои - светлый трек + жёлтое заполнение.
    Долю заполнения обновляет JS через переменную --p (см. rangeFill).
    .hue исключён: его радужный фон и свой thumb остаются как были. */
 html[data-theme="light"] input[type=range]:not(.hue){
@@ -278,6 +278,41 @@ header .sub{
   flex-wrap:wrap;
   justify-content:flex-end
 }
+
+/* кнопка смены темы слева от IP */
+#themeToggle{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:30px;
+  height:30px;
+  padding:0;
+  border-radius:50%;
+  border:1px solid var(--line);
+  background:var(--card2);
+  color:var(--dim);
+  cursor:pointer;
+  transition:border-color .15s,color .15s
+}
+
+#themeToggle:hover{
+  border-color:var(--acc);
+  color:var(--fg)
+}
+
+#themeToggle svg{
+  width:16px;
+  height:16px;
+  display:none
+}
+
+/* в тёмной теме показываем солнце, в светлой - луну.
+   Селекторы с двумя id - иначе #themeToggle svg{display:none} перебивает
+   одиночный id и рисуются обе иконки сразу. */
+#themeToggle #themeIcoSun{display:block}
+
+html[data-theme="light"] #themeToggle #themeIcoMoon{display:block}
+html[data-theme="light"] #themeToggle #themeIcoSun{display:none}
 
 .pill{
   display:inline-flex;
@@ -627,6 +662,42 @@ input:disabled{
   cursor:default
 }
 
+/* поле пароля с глазиком */
+.pwWrap{
+  position:relative;
+  display:inline-flex;
+  align-items:center
+}
+
+#passEye{
+  position:absolute;
+  right:3px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:26px;
+  height:26px;
+  padding:0;
+  border:none;
+  background:none;
+  color:var(--dim);
+  cursor:pointer
+}
+
+#passEye:hover{color:var(--fg)}
+
+#passEye svg{
+  width:16px;
+  height:16px;
+  display:none
+}
+
+/* скрытый пароль: обычный глаз, видимый: перечёркнутый */
+#passEye .icoEye{display:block}
+
+#passEye.shown .icoEyeOff{display:block}
+#passEye.shown .icoEye{display:none}
+
 /* радужный ползунок оттенка */
 input[type=range].hue{
   -webkit-appearance:none;
@@ -795,7 +866,7 @@ button.btn:disabled{
 }
 
 /* Кнопки режима дисплея: растягиваются на ширину карточки,
-   а когда не влезают — переносятся на следующую строку */
+   а когда не влезают - переносятся на следующую строку */
 .seg[data-role="mode"]{
   flex-wrap:wrap
 }
@@ -912,7 +983,7 @@ tr.pick:hover td{
   background:#1b1f27
 }
 
-/* выбранная сеть (вместо инлайнового цвета — зависит от темы) */
+/* выбранная сеть (вместо инлайнового цвета - зависит от темы) */
 #netTable tr.sel{
   background:var(--pick)
 }
@@ -1300,6 +1371,10 @@ tr.pick:hover td{
     <div class="sub" id="hdrSub"> </div>
   </div>
   <div id="hdrRight">
+    <button id="themeToggle" type="button" aria-label="Сменить тему" title="Сменить тему">
+      <svg id="themeIcoMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <svg id="themeIcoSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    </button>
     <span class="pill" id="pillNet">--</span>
   </div>
 </header>
@@ -1458,7 +1533,7 @@ tr.pick:hover td{
       <div class="row">
         <span class="lab">
           Лимит питания
-          <span class="hint">мА, 0 — без ограничения</span>
+          <span class="hint">мА, 0 - без ограничения</span>
         </span>
 
         <input
@@ -1621,7 +1696,7 @@ tr.pick:hover td{
       <div class="row" style="margin-top:10px">
         <span class="lab">
           Имя устройства
-          <span class="hint">доступно как http://&lt;имя&gt;.local</span>
+          <span class="hint">А также имя в локальной сети (http://&lt;имя&gt;.local)</span>
         </span>
 
         <input type="text" id="hostname" style="width:180px">
@@ -1659,13 +1734,19 @@ tr.pick:hover td{
       <div class="row">
         <span class="lab">Пароль</span>
 
+        <span class="pwWrap">
         <input
           type="password"
           id="wifiPass"
           maxlength="64"
-          style="width:200px"
+          style="width:200px;padding-right:34px"
           placeholder="пароль"
         >
+          <button id="passEye" type="button" aria-label="Показать пароль" title="Показать пароль">
+            <svg class="icoEye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="icoEyeOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </span>
       </div>
 
       <div class="btns" style="margin-top:10px">
@@ -1772,6 +1853,10 @@ tr.pick:hover td{
             <button class="btn acc" id="btnOta">Выбрать файл…</button>
             <input type="file" id="otaFile" accept=".bin" style="display:none">
           </span>
+          <span style="display:flex;align-items:center;gap:10px">
+            <span id="updLabel" style="color:var(--dim);font-size:13px">Проверка…</span>
+            <button class="btn acc" id="updBtn" disabled>Обновить</button>
+          </span>
         </div>
 
         <div class="btns" style="margin-top:10px">
@@ -1870,7 +1955,7 @@ const HDR_PHRASES = [
 const hdrPhrase =
   HDR_PHRASES[Math.floor(Math.random() * HDR_PHRASES.length)];
 
-/* Фраза должна провисеть минимум 1с — до этого момента
+/* Фраза должна провисеть минимум 1с - до этого момента
    любой setHdrSub() только запоминает текст и применит его позже. */
 const HDR_MIN_MS = 1000;
 const hdrShownAt = Date.now();
@@ -2024,7 +2109,7 @@ async function runSave(){
 
   saveTimer = null;
 
-  /* another POST is still running — chain, don't drop the edit */
+  /* another POST is still running - chain, don't drop the edit */
   if(saveBusy){
     saveTimer = setTimeout(runSave, 150);
     return;
@@ -2051,9 +2136,12 @@ async function runSave(){
     saveFail = 0;
 
     if(r.reboot){
-      /* device reboots on its own — poll until it answers, then reload */
+      /* смена имени хоста: после перезагрузки старое имя исчезнет из mDNS —
+         ждём, пока новое начнёт отвечать, и уходим на него */
       waitRestart(
-        'Устройство перезагружается, страница подключится заново...'
+        'Устройство перезагружается, страница подключится заново...',
+        null,
+        ((sent.hostname || 'hexaddon') + '.local')
       );
     }
 
@@ -2066,7 +2154,7 @@ async function runSave(){
     else if(saveFail === 3)
       toast('Нет связи с устройством, повторяю...', true);
 
-    /* keep the value and retry — dropping it here would lose the edit */
+    /* keep the value and retry - dropping it here would lose the edit */
     if(saveTimer === null)
       saveTimer = setTimeout(runSave, 3000);
   }
@@ -2101,7 +2189,7 @@ function overlayHide(){
 }
 
 
-/* error overlays (no spinner) must be dismissible — otherwise a failed
+/* error overlays (no spinner) must be dismissible - otherwise a failed
    save/reboot screen blocks the page forever */
 $('overlay').addEventListener('click', ()=>{
   if($('ovSpin').style.display === 'none')
@@ -2109,17 +2197,36 @@ $('overlay').addEventListener('click', ()=>{
 });
 
 
-function waitRestart(msg,okWhen){
+function waitRestart(msg,okWhen,goHost,timeoutMs){
   overlay(
     'Перезагрузка',
     msg,
-    ''
+    goHost
+      ? 'Открою http://' + goHost + ' автоматически'
+      : ''
   );
 
   const t0 = Date.now();
+  const url = goHost ? ('http://' + goHost + '/') : '';
+  const limit = timeoutMs || 60000;
 
   const iv = setInterval(async ()=>{
     try{
+
+      if(goHost){
+        /* новое имя живёт в другом origin: обычный fetch заблокирует
+           CORS, а no-cors резолвится, как только хост начал отвечать
+           (в портале его резолвит DNS-перехват, в домашней сети — mDNS) */
+        await fetch(
+          url + 'api/status?r=' + Date.now(),
+          {mode:'no-cors', cache:'no-store'}
+        );
+
+        clearInterval(iv);
+        location.href = url;
+        return;
+      }
+
       const s = await jget('/api/status');
 
       if(!okWhen || okWhen(s)){
@@ -2129,12 +2236,15 @@ function waitRestart(msg,okWhen){
 
     }catch(e){}
 
-    if(Date.now()-t0 > 60000){
+    if(Date.now()-t0 > limit){
       clearInterval(iv);
 
       overlayMsg(
         'Не отвечает',
-        'Устройство не вышло на связь. Подключитесь к его точке доступа или проверьте питание.',
+        goHost
+          ? 'Не удалось найти ' + goHost + '. ' +
+            'Открой адрес вручную, когда устройство загрузится.'
+          : 'Устройство не вышло на связь. Подключитесь к его точке доступа или проверьте питание.',
         '',
         false
       );
@@ -2184,7 +2294,7 @@ function goTab(name){
 }
 
 /* =========================================================
-   Свайпы влево/вправо — переключение вкладок (тач)
+   Свайпы влево/вправо - переключение вкладок (тач)
    ========================================================= */
 
 (function(){
@@ -2321,6 +2431,43 @@ function rssiText(r){
 
 /* ==================== Header ========================= */
 
+/* почему не поднялось подключение — по коду от прошивки
+   (см. onStaDisconnected в net.cpp) */
+function wifiFailText(){
+  const r =
+    st && st.sta && st.sta.disconnect || 0;
+
+  const ssid =
+    (st && st.sta && st.sta.ssid) || '?';
+
+  /* 2 AUTH_EXPIRE, 15 4WAY_HANDSHAKE_TIMEOUT, 202 AUTH_FAIL,
+     204 HANDSHAKE_TIMEOUT — рукопожатие падает при неверном пароле */
+  if(r === 2 || r === 15 || r === 202 || r === 204)
+    return (
+      'Пароль не подходит сети "' + ssid + '". ' +
+      'Проверь пароль и попробуй ещё раз на вкладке "Сеть".'
+    );
+
+  if(r === 201)
+    return (
+      'Сеть "' + ssid + '" не найдена. Проверь имя сети; ' +
+      'устройство видит только 2.4 ГГц.'
+    );
+
+  if(r === 200)
+    return (
+      'Сигнал сети "' + ssid + '" слишком слабый. ' +
+      'Поднеси устройство ближе к роутеру и попробуй снова.'
+    );
+
+  return (
+    'Не удалось подключиться к сети "' + ssid + '" ' +
+    (r ? '(' + (st.sta.disconnectName || 'код ' + r) + '). ' : '') +
+    'Открой вкладку "Сеть" и проверь настройки.'
+  );
+}
+
+
 function renderHeader(){
 
     setHdrSub(
@@ -2338,22 +2485,14 @@ function renderHeader(){
     b.className = 'show';
 
     b.textContent =
-      'Не удалось подключиться к сети "' +
-      (st.sta.ssid || '?') +
-      '". Откройте вкладку "Сеть", выберите другую точку или проверьте пароль.';
+      wifiFailText();
 
   }else if(st.portal){
 
     b.className = 'show';
 
     b.textContent =
-      'Режим настройки: подключитесь к точке доступа ' +
-      (st.ap ? st.ap.ssid : 'HEXADDON-xxxx') +
-      (
-        st.ap
-          ? (' и откройте http://' + st.ap.ip)
-          : ''
-      );
+      'Режим настройки: подключитесь к своей Wi-Fi сети';
 
   }else{
 
@@ -2583,7 +2722,7 @@ function buildCards(pres,se,modes){
       'I²C аддоны не обнаружены' +
       '</div>' +
       '<p class="dimtext" style="margin:7px 0 0">' +
-      'Подключите аддон с дисплеем или термодатчиком BME280' +
+      'Подключите аддон с дисплеем или термодатчиком' +
       '</p>' +
       '</div>' +
       '</div>'
@@ -2726,7 +2865,7 @@ function dispBodyHtml(i,m,hasImg,se){
 
 function animPresetHtml(i){
   let cur = (cfg.animPresets && cfg.animPresets[i]) || 'offzone2024';
-  // 'none' больше нет в списке — подставляем первый валидный
+  // 'none' больше нет в списке - подставляем первый валидный
   if(cur === 'none') cur = 'offzone2024';
 
   return `
@@ -3089,7 +3228,7 @@ function renderDash(){
     h += `
     <div class="dashBtn dashInfo">
       ${ICO_DASH_SENS}
-      <div class="dashTitle">${parts.length ? parts.join(' · ') : '—'}</div>
+      <div class="dashTitle">${parts.length ? parts.join(' · ') : '-'}</div>
       ${se.pres != null ? `<div class="dashTitle">${se.pres.toFixed(0)} mmHg</div>` : ''}
     </div>`;
   }
@@ -3134,10 +3273,10 @@ function renderStatus(){
 
   $('netState').textContent =
     st.portal
-      ? 'точка доступа (настройка)'
+      ? 'Режим настройки'
       : st.sta.connected
-        ? 'подключено'
-        : 'нет подключения';
+        ? 'Подключено'
+        : 'Нет подключения';
 
   $('netSsid').textContent =
     st.sta.connected
@@ -3159,6 +3298,24 @@ function applyTheme(){
 
   fillAllRanges();
 }
+
+
+/* иконка в хедере: мгновенное переключение + сохранение */
+$('themeToggle').onclick = ()=>{
+  if(!cfg) return;
+
+  cfg.theme =
+    (cfg.theme === 'light') ? 'dark' : 'light';
+
+  applyTheme();
+
+  setVal(
+    $('themeSel'),
+    cfg.theme
+  );
+
+  saveNow(0);
+};
 
 
 /* ползунки в светлой теме: доля заполнения --p (см. CSS) */
@@ -3420,7 +3577,7 @@ $('dashPower').onclick = ()=>{
   saveNow(0);
 };
 
-/* Тап по дисплею на дашборде — циклично меняет режим */
+/* Тап по дисплею на дашборде - циклично меняет режим */
 
 $('dashDevs').addEventListener('click', e=>{
 
@@ -3730,7 +3887,7 @@ function openEditor(i){
   edModalIdx = i;
 
   $('edModalTitle').textContent =
-    'Редактор — ' + idxAddr(i);
+    'Редактор - ' + idxAddr(i);
 
   $('edModalBody').innerHTML =
     fullEditorHtml(i);
@@ -3790,7 +3947,7 @@ async function closeEditor(save){
 
     Object.assign(ED[i], snap);
 
-    /* binc/fl still belong to the cancelled image — rebuild from
+    /* binc/fl still belong to the cancelled image - rebuild from
        the restored source */
     ED[i].fl = null;
     ED[i].binc = null;
@@ -3830,7 +3987,7 @@ function syncEd(i, card){
   set('dith', e.dith);
   set('zoom', Math.round(e.zoom * 100));
 
-  /* значения обновились программно — пересчитать заполнение ползунков */
+  /* значения обновились программно - пересчитать заполнение ползунков */
   card
     .querySelectorAll('input[type=range]')
     .forEach(rangeFill);
@@ -4499,7 +4656,7 @@ async function uploadImg(i){
   /* nothing to send: blank preview would upload 1024 zero bytes and
      the device would show a black frame instead of "NO PICTURE" */
   if(!e.src || e.blank){
-    toast('Нет картинки — сначала выберите файл', true);
+    toast('Нет картинки - сначала выберите файл', true);
     return false;
   }
 
@@ -4970,7 +5127,7 @@ document.addEventListener('keydown', e=>{
     else if(g.role!=='zoom') toast('Фильтры доступны после выбора файла');
   }, true);
 
-  /* Браузер начал нативный вертикальный скролл — это не клик и не повод для toast. */
+  /* Браузер начал нативный вертикальный скролл - это не клик и не повод для toast. */
   document.addEventListener('pointercancel', e=>{
     if(gesture && gesture.id===e.pointerId) gesture=null;
   }, true);
@@ -5252,7 +5409,7 @@ $('btnScan').onclick =
     try{
 
       /* прошивка сканирует асинхронно: пока скан идёт, она отвечает
-         202 {"scanning":true} — поллим раз в секунду */
+         202 {"scanning":true} - поллим раз в секунду */
       let r = null;
 
       for(
@@ -5412,6 +5569,26 @@ function renderNetworks(list){
 }
 
 
+/* глазик в поле пароля + Enter для подключения */
+$('passEye').onclick = ()=>{
+  const inp = $('wifiPass');
+  const show = (inp.type === 'password');
+
+  inp.type = show ? 'text' : 'password';
+
+  const eye = $('passEye');
+
+  eye.classList.toggle('shown', show);
+  eye.title = eye.ariaLabel =
+    show ? 'Скрыть пароль' : 'Показать пароль';
+};
+
+$('wifiPass').onkeydown = e=>{
+  if(e.key === 'Enter')
+    $('btnConnect').click();
+};
+
+
 $('btnConnect').onclick =
   async ()=>{
 
@@ -5453,19 +5630,29 @@ $('btnConnect').onclick =
       return;
     }
 
+    const host =
+      (cfg.hostname || 'hexaddon') + '.local';
+
     overlayMsg(
       'Подключение',
       'Устройство сохраняет сеть "' +
       ssid +
       '" и перезагружается.',
-      'Подключитесь к домашнему Wi-Fi и откройте http://' +
-      cfg.hostname +
-      '.local',
+      'Эта страница сама откроет http://' +
+      host +
+      ', когда устройство подключится.',
       true
     );
 
     const t0 =
       Date.now();
+
+    let dead = 0;  // подряд неотвеченных опросов: AP выключился
+
+    const goLocal = ()=>{
+      clearInterval(iv);
+      location.href = 'http://' + host + '/';
+    };
 
     const iv =
       setInterval(
@@ -5476,13 +5663,15 @@ $('btnConnect').onclick =
             const s =
               await jget('/api/status');
 
+            dead = 0;
+
             if(
               s.sta &&
               s.sta.connected &&
               !s.portal
             ){
-              clearInterval(iv);
-              location.reload();
+              /* устройство в домашней сети — уходим с умирающего 192.168.4.1 */
+              goLocal();
             }
 
             if(
@@ -5518,24 +5707,33 @@ $('btnConnect').onclick =
               );
             }
 
-          }catch(e){}
+          }catch(e){
+            /* 192.168.4.1 не отвечает: AP погас при перезагрузке, компьютер
+               возвращается в домашнюю сеть. Даём устройству время подняться
+               и уходим на mDNS-адрес, который живёт уже в домашней сети */
+            dead++;
 
-          if(Date.now()-t0 > 60000){
-
-            clearInterval(iv);
-
-            overlayMsg(
-              'Долго',
-              'Устройство не ответило за 60 с. Подключитесь к точке доступа HEXADDON-xxxx и откройте её страницу.',
-              '',
-              false
-            );
+            if(dead >= 2 && Date.now()-t0 >= 20000)
+              goLocal();
           }
+
+          if(Date.now()-t0 > 60000)
+            goLocal();
 
         },
         2500
       );
   };
+
+
+/* имя точки портала: HEXADDON- + последние 2 байта MAC (как в net.cpp) */
+function portalApName(){
+  if(st && st.sta && st.sta.mac)
+    return 'HEXADDON-' +
+      st.sta.mac.replace(/:/g, '').slice(-4).toUpperCase();
+
+  return 'HEXADDON-xxxx';
+}
 
 
 $('btnForget').onclick =
@@ -5555,10 +5753,20 @@ $('btnForget').onclick =
         {}
       );
 
+      /* как только пользователь подключится к точке, DNS-перехват портала
+         ответит на старое имя устройства — открываем портал в этой вкладке */
+      waitRestart(
+        'Сеть забыта. Устройство перезагружается в режим настройки.',
+        null,
+        ((cfg && cfg.hostname) || 'hexaddon') + '.local',
+        180000
+      );
+
       overlayMsg(
         'Сеть забыта',
         'Устройство перезагружается в режим настройки.',
-        'Подключитесь к точке доступа HEXADDON-xxxx.',
+        'Подключись к точке ' + portalApName() +
+        ' — страница откроется сама.',
         true
       );
 
@@ -5580,7 +5788,7 @@ function hostClean(v){
   return v;
 }
 
-/* while typing only refresh the hint — saving a half-typed name would
+/* while typing only refresh the hint - saving a half-typed name would
    make the firmware reboot the device mid-edit; save on change (blur/Enter) */
 $('hostname').oninput = e=>{
   const clean = hostClean(e.target.value);
@@ -5644,10 +5852,19 @@ $('btnFactory').onclick =
         {}
       );
 
+      /* как у «Забыть сеть»: подключился к точке — портал откроется сам */
+      waitRestart(
+        'Настройки стёрты. Устройство перезагружается в режим настройки.',
+        null,
+        ((cfg && cfg.hostname) || 'hexaddon') + '.local',
+        180000
+      );
+
       overlayMsg(
         'Сброс',
         'Настройки стёрты. Устройство перезагружается в режим настройки.',
-        'Подключитесь к точке доступа HEXADDON-xxxx.',
+        'Подключись к точке ' + portalApName() +
+        ' — страница откроется сама.',
         true
       );
 
@@ -5768,6 +5985,112 @@ $('otaFile').onchange = e=>{
 
 
 /* =========================================================
+   online update from the GitHub release feed
+   (the device itself queries/downloads GitHub, see src/ota.cpp)
+   ========================================================= */
+
+let updTimer = null;
+
+async function updCheck(){
+
+  if(st && st.portal){
+    $('updLabel').textContent = 'Нет сети';
+    $('updBtn').disabled = true;
+    return;
+  }
+
+  let j;
+
+  try{
+    j = await jget('/api/update/check', 12000);
+  }catch(e){
+    $('updLabel').textContent = 'Ошибка проверки';
+    $('updBtn').disabled = true;
+    return;
+  }
+
+  clearTimeout(updTimer);
+
+  if(j.checking){
+    $('updLabel').textContent = 'Проверка…';
+    updTimer = setTimeout(updCheck, 2000);
+    return;
+  }
+
+  if(j.error){
+    $('updLabel').textContent = 'Ошибка проверки';
+    $('updBtn').disabled = true;
+    return;
+  }
+
+  if(j.available){
+    $('updLabel').textContent = 'Доступна версия ' + j.latest;
+    $('updLabel').style.color = 'var(--acc)';
+    $('updBtn').disabled = false;
+    return;
+  }
+
+  $('updLabel').textContent = 'Система обновлена';
+  $('updLabel').style.color = 'var(--dim)';
+  $('updBtn').disabled = true;
+}
+
+
+$('updBtn').onclick = async ()=>{
+
+  if(
+    !confirm(
+      'Скачать и установить прошивку с GitHub? Устройство перезагрузится.'
+    )
+  )
+    return;
+
+  try{
+    await jpost('/api/update/ota', {});
+  }catch(e){
+    overlayMsg('Ошибка обновления', e.message, '', false);
+    return;
+  }
+
+  overlay('Обновление', 'Загрузка с GitHub', '0 %');
+
+  const t0 = Date.now();
+
+  const iv = setInterval(async ()=>{
+
+    let s;
+
+    try{
+      s = await jget('/api/update/ota', 4000);
+    }catch(e){
+      return;  /* устройство перезагружается - ждём ответа */
+    }
+
+    if(s.state === 'download'){
+      $('ovMsg2').textContent = s.progress + ' %';
+    }else if(s.state === 'done'){
+      clearInterval(iv);
+      waitRestart('Прошивка обновлена, устройство перезагружается...');
+    }else if(s.state === 'error'){
+      clearInterval(iv);
+      overlayMsg(
+        'Ошибка обновления',
+        s.error || 'Ошибка загрузки',
+        'Прошивка не изменена, работает прежняя.',
+        false
+      );
+    }else if(s.state === 'idle' && Date.now()-t0 > 20000){
+      /* перезагрузка уже прошла, пока страница не опрашивала */
+      clearInterval(iv);
+      waitRestart('Прошивка обновлена, устройство перезагружается...');
+    }
+
+  }, 1000);
+
+};
+
+
+/* =========================================================
    sync / polling
    ========================================================= */
 
@@ -5845,7 +6168,7 @@ function syncCfgFromStatus(t0){
 
 async function refreshStatus(){
 
-  /* only one poll in flight — a slow response must not be
+  /* only one poll in flight - a slow response must not be
      overwritten by an older one landing later */
   if(stBusy || !cfg)
     return;
@@ -5858,7 +6181,7 @@ async function refreshStatus(){
     const fresh = await jget('/api/status');
 
     /* a local edit (mode change etc.) happened while this request was
-       in flight — the response may predate it, drop it */
+       in flight - the response may predate it, drop it */
     if(t0 < localEditAt)
       return;
 
@@ -5918,6 +6241,7 @@ async function init(){
   renderHeader();
   renderStatus();
   renderCfg();
+  updCheck();
 
   (st.displays || [])
     .forEach(

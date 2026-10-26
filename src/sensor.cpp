@@ -20,7 +20,10 @@ static const char *chip = "";
 static uint8_t chipId(uint8_t a) {
   Wire.beginTransmission(a);
   Wire.write(0xD0);
-  if (Wire.endTransmission(false) != 0) return 0;
+  // plain STOP (not a repeated start): a missing device NACKs here, so we
+  // never reach requestFrom() — that call logs a scary Wire.cpp error
+  // every 3s when no sensor is attached
+  if (Wire.endTransmission() != 0) return 0;
   if (Wire.requestFrom(a, (uint8_t)1) != 1) return 0;
   return Wire.read();
 }
@@ -61,6 +64,13 @@ static void markAbsent(const char *why) {
 
 void sensorLoop() {
   uint32_t now = millis();
+
+  // sensor sits on the addon rail too: never probe it with power off,
+  // a dead-ish bus only burns Wire timeouts
+  if (!settings.addonPower) {
+    if (present) markAbsent("addon power off");
+    return;
+  }
 
   if (!present) {
     if (lastTry != 0 && now - lastTry < 3000) return;

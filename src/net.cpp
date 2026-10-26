@@ -12,9 +12,30 @@ static bool portal = false;
 static bool mdnsUp = false;
 static bool connecting = false;
 static uint32_t tConnect = 0;
+static uint8_t failCount = 0;    // consecutive rejected STA attempts
+static uint32_t retryAt = 0;     // deadline of a periodic STA retry from the portal
 static String apSsid;
 
+// the core knows exactly why STA dropped: NO_AP_FOUND (wrong SSID / 5 GHz
+// only network), 4WAY_HANDSHAKE_TIMEOUT (wrong password), BEACON_TIMEOUT
+// (weak signal). Keep the last reason for /api/status (the portal shows it)
+// and log it instead of guessing.
+static uint8_t lastDisc = 0;
+
+static void onStaDisconnected(WiFiEvent_t, WiFiEventInfo_t info) {
+  uint8_t r = info.wifi_sta_disconnected.reason;
+  // our own disconnect() (portal startup / retry end) reports ASSOC_LEAVE —
+  // it is not a connection failure and must not overwrite the real reason
+  // (e.g. 4WAY_HANDSHAKE_TIMEOUT = wrong password)
+  if (r == WIFI_REASON_ASSOC_LEAVE) return;
+  lastDisc = r;
+  failCount++;
+  Serial.printf("[net] disconnected: %s (%u)\n",
+                WiFi.disconnectReasonName((wifi_err_reason_t)r), (unsigned)r);
+}
+
 static void startConnect() {
+  WiFi.setAutoReconnect(true);  // quick retries while we just want to connect
   WiFi.setHostname(settings.hostname.c_str());
   WiFi.begin(settings.wifiSsid.c_str(), settings.wifiPass.c_str());
   tConnect = millis();
@@ -23,19 +44,37 @@ static void startConnect() {
 }
 
 static void startPortal() {
-  WiFi.mode(WIFI_AP_STA);
+  // Full portal: STA off completely. Any STA activity hops radio channels
+  // and blinks the AP beacon — phones refuse to show such a network.
+  WiFi.setAutoReconnect(false);
+  WiFi.disconnect(false);
+  WiFi.mode(WIFI_AP);
   String mac = WiFi.macAddress();
   apSsid = "HEXADDON-" + mac.substring(12, 14) + mac.substring(15, 17);
-  WiFi.softAP(apSsid.c_str());
+  // softAP can silently fail right after a mode switch — retry and report
+  bool ap = false;
+  for (int i = 0; i < 5 && !ap; i++) {
+    ap = WiFi.softAP(apSsid.c_str());
+    if (!ap) {
+      Serial.printf("[net] softAP try %d failed\n", i + 1);
+      delay(150);
+    }
+  }
   dns.start(53, "*", WiFi.softAPIP());
   portal = true;
-  Serial.printf("[net] setup portal: \"%s\" ip=%s\n", apSsid.c_str(),
-                WiFi.softAPIP().toString().c_str());
+  retryAt = 0;
+  failCount = 0;
+  tConnect = millis();
+  Serial.printf("[net] setup portal: \"%s\" ip=%s ap=%s ch=%d\n", apSsid.c_str(),
+                WiFi.softAPIP().toString().c_str(), ap ? "up" : "FAIL",
+                (int)WiFi.channel());
 }
 
 static void stopPortal() {
   dns.stop();
   WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);  // back to normal STA behavior
   portal = false;
   apSsid = "";
   Serial.println(F("[net] portal closed, STA connected"));
@@ -44,6 +83,8 @@ static void stopPortal() {
 void netBegin() {
   WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
+  netSetTxPower(WIFI_TX_POWER_DBM);
+  WiFi.onEvent(onStaDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   // NTP clock (for the Clock display mode): syncs whenever STA is up.
   // The timezone comes from settings.tz (applied in Settings::sanitize).
   configTime(0, 0, "pool.ntp.org", "time.google.com");
@@ -70,6 +111,8 @@ void netLoop() {
   if (conn) {
     connecting = false;
     lastConn = millis();
+    lastDisc = 0;  // stale reason must not surface after a success
+    failCount = 0;
     if (!mdnsUp) {
       static uint32_t mdnsRetry = 0;  // don't hammer MDNS.begin() every loop
       if ((int32_t)(millis() - mdnsRetry) >= 0) {
@@ -84,25 +127,60 @@ void netLoop() {
     }
     if (portal && settings.wifiConfigured) stopPortal();
   } else if (settings.wifiConfigured) {
-    if (!portal && connecting && millis() - tConnect > 20000) {
-      // credentials are wrong or network is down -> give user the setup portal
-      startPortal();
-    } else if (!portal && !connecting && lastConn &&
-               millis() - lastConn > 20000) {
-      // network dropped AFTER a successful connection and the built-in
-      // auto-reconnect hasn't helped for 20s -> open the setup portal
-      // (STA keeps retrying below), otherwise the device is unreachable
-      Serial.println(F("[net] connection lost, opening portal"));
-      startPortal();
-      tConnect = millis();
-    }
-    if (portal && millis() - tConnect > 25000) {
-      WiFi.reconnect();
-      tConnect = millis();
+    if (!portal) {
+      bool timeout = (connecting && millis() - tConnect > 20000) ||
+                     (!connecting && lastConn && millis() - lastConn > 20000);
+      // 10 rejected attempts or 20s of silence -> full portal (AP only,
+      // STA off): the beacon is rock stable, phones always see it
+      if (failCount >= 10 || timeout) startPortal();
+    } else if (retryAt) {
+      // a periodic STA retry is in flight; give it 15s, then drop STA again
+      if ((int32_t)(millis() - retryAt) >= 0) {
+        retryAt = 0;
+        WiFi.disconnect(false);
+        WiFi.mode(WIFI_AP);
+        Serial.println(F("[net] portal: STA retry failed, back to AP only"));
+        tConnect = millis();
+      }
+    } else if (millis() - tConnect > 120000) {
+      // once every 2 minutes: a short STA attempt in case the router just
+      // rebooted — the device recovers on its own instead of sitting in
+      // the portal forever (the AP blinks for these 15s, that's the price)
+      Serial.println(F("[net] portal: periodic STA retry"));
+      WiFi.mode(WIFI_AP_STA);
+      WiFi.begin(settings.wifiSsid.c_str(), settings.wifiPass.c_str());
+      retryAt = millis() + 15000;
     }
   }
 }
 
 bool netIsPortal() {
   return portal;
+}
+
+// map a dBm value onto the discrete wifi_power_t steps (0 = max/19.5)
+static wifi_power_t txPowerLevel(float dbm) {
+  if (dbm >= 19.25f) return WIFI_POWER_19_5dBm;
+  if (dbm >= 18.75f) return WIFI_POWER_19dBm;
+  if (dbm >= 17.75f) return WIFI_POWER_18_5dBm;
+  if (dbm >= 16) return WIFI_POWER_17dBm;
+  if (dbm >= 14) return WIFI_POWER_15dBm;
+  if (dbm >= 12) return WIFI_POWER_13dBm;
+  if (dbm >= 10) return WIFI_POWER_11dBm;
+  if (dbm >= 8) return WIFI_POWER_8_5dBm;
+  if (dbm >= 6) return WIFI_POWER_7dBm;
+  if (dbm >= 3.5f) return WIFI_POWER_5dBm;
+  if (dbm >= 1) return WIFI_POWER_2dBm;
+  return WIFI_POWER_MINUS_1dBm;
+}
+
+void netSetTxPower(float dbm) {
+  if (dbm <= 0) dbm = 19.5f;
+  WiFi.setTxPower(txPowerLevel(dbm));
+}
+
+uint8_t netLastDisconnectReason() { return lastDisc; }
+
+const char *netLastDisconnectName() {
+  return lastDisc ? WiFi.disconnectReasonName((wifi_err_reason_t)lastDisc) : "";
 }

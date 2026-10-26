@@ -10,6 +10,7 @@
 #include "leds.h"
 #include "display.h"
 #include "net.h"
+#include "ota.h"
 #include "sensor.h"
 #include "settings.h"
 #include "index_html.h"  // generated from data/index.html by scripts/embed_index.py
@@ -104,11 +105,18 @@ static void fillStatus(JsonDocument &d) {
 
   JsonObject sta = d["sta"].to<JsonObject>();
   sta["connected"] = (WiFi.status() == WL_CONNECTED);
-  sta["ssid"] = WiFi.SSID();
+  // full portal: the STA interface is off and forgets its SSID — take it
+  // from the saved settings so the page can say which network failed
+  String ssid = WiFi.SSID();
+  if (!ssid.length()) ssid = settings.wifiSsid;
+  sta["ssid"] = ssid;
   sta["ip"] = WiFi.localIP().toString();
   sta["rssi"] = WiFi.RSSI();
   sta["mac"] = WiFi.macAddress();
   sta["hostname"] = settings.hostname;
+  // why the last connection attempt failed (shown on the portal page)
+  sta["disconnect"] = netLastDisconnectReason();
+  sta["disconnectName"] = netLastDisconnectName();
 
   if (netIsPortal()) {
     JsonObject ap = d["ap"].to<JsonObject>();
@@ -548,6 +556,46 @@ static void handleUpdatePost() {
   scheduleRestart(600);
 }
 
+// ---------------- OTA from the GitHub release feed ----------------
+// The device itself queries/downloads from GitHub in background tasks (a
+// synchronous TLS request would freeze the whole loop, see /api/networks).
+
+static void handleUpdateCheck() {
+  const OtaState &s = otaState();
+  if (s.checking || !s.checked || millis() - s.checkedAt > CHECK_TTL_MS) {
+    if (!s.checking) otaCheckAsync();
+    sendJson(202, "{\"checking\":true}");
+    return;
+  }
+  if (s.netError) {
+    sendJson(200, "{\"current\":\"" + String(FW_VERSION) + "\",\"error\":\"check failed\"}");
+    return;
+  }
+  JsonDocument d;
+  d["current"] = FW_VERSION;
+  d["latest"] = s.latest;
+  d["available"] = otaNewerThan(s.latest);
+  sendJson(200, docStr(d));
+}
+
+static void handleOtaStart() {
+  String err;
+  if (!otaStart(err)) {
+    sendErr(409, err.c_str());
+    return;
+  }
+  sendJson(202, "{\"ok\":true}");
+}
+
+static void handleOtaStatus() {
+  const OtaState &s = otaState();
+  JsonDocument d;
+  d["state"] = s.stage;
+  d["progress"] = s.progress;
+  if (s.error.length()) d["error"] = s.error;
+  sendJson(200, docStr(d));
+}
+
 static void handleFactory() {
   settings.factoryReset();
   // RAM still holds the old config — a settings.save() in the 800ms
@@ -620,6 +668,9 @@ void webBegin() {
   server.on("/api/reboot", HTTP_POST, handleReboot);
   server.on("/api/factory", HTTP_POST, handleFactory);
   server.on("/api/update", HTTP_POST, handleUpdatePost, handleUpdateUpload);
+  server.on("/api/update/check", HTTP_GET, handleUpdateCheck);
+  server.on("/api/update/ota", HTTP_GET, handleOtaStatus);
+  server.on("/api/update/ota", HTTP_POST, handleOtaStart);
   server.onNotFound(handleNotFound);
   server.begin();
 }

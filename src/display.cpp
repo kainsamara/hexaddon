@@ -234,19 +234,30 @@ void displayLoadImage(uint8_t addr) {
   String key = imgKey(addr);
   Preferences p;
   p.begin("hexaddon", false);
-  size_t n = p.getBytes(key.c_str(), d->img, IMG_SIZE);
+  size_t n = 0;
+  // isKey() first: a plain getBytes() on a missing key makes the core
+  // log an ERROR line ("nvs_get_blob len fail") on every boot
+  if (p.isKey(key.c_str()))
+    n = p.getBytes(key.c_str(), d->img, IMG_SIZE);
   if (n != IMG_SIZE) {
-    // image still in LittleFS from an old firmware -> migrate to NVS once
-    String path = legacyPath(addr);
-    if (LittleFS.exists(path)) {
-      File f = LittleFS.open(path, "r");
-      if (f) {
-        n = f.read(d->img, IMG_SIZE);
-        f.close();
-        if (n == IMG_SIZE &&
-            p.putBytes(key.c_str(), d->img, IMG_SIZE) == IMG_SIZE) {
-          LittleFS.remove(path);
-          Serial.printf("[disp] image 0x%02X moved to NVS\n", addr);
+    // image still in LittleFS from an old firmware -> migrate to NVS once.
+    // Checked once per boot: exists() on a missing file logs a vfs error,
+    // and the legacy file can't appear later anyway.
+    static bool legacyDone[DISP_NUM] = {false, false};
+    int di = (addr == DISP_ADDR0) ? 0 : 1;
+    if (!legacyDone[di]) {
+      legacyDone[di] = true;
+      String path = legacyPath(addr);
+      if (LittleFS.exists(path)) {
+        File f = LittleFS.open(path, "r");
+        if (f) {
+          n = f.read(d->img, IMG_SIZE);
+          f.close();
+          if (n == IMG_SIZE &&
+              p.putBytes(key.c_str(), d->img, IMG_SIZE) == IMG_SIZE) {
+            LittleFS.remove(path);
+            Serial.printf("[disp] image 0x%02X moved to NVS\n", addr);
+          }
         }
       }
     }
@@ -487,6 +498,22 @@ static void onDisp(Disp &d) {
 
 void displayLoop() {
   uint32_t now = millis();
+
+  // Displays live on the addon power rail. With the rail off the bus is
+  // dead-ish: a half-powered panel parasitizes through the pull-ups, ACKs
+  // randomly and every Wire call burns its 20ms timeout — the loop freezes.
+  // Skip ALL i2c work and drop the panels until the power returns.
+  if (!settings.addonPower) {
+    for (int i = 0; i < DISP_NUM; i++) {
+      if (disps[i].present || disps[i].needInit) {
+        disps[i].present = false;
+        disps[i].needInit = false;
+        disps[i].hits = 0;
+        dirty = true;
+      }
+    }
+    return;  // no scan, no init, no render
+  }
 
   if (now - lastScan >= 2000) {
     lastScan = now;

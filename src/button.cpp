@@ -6,6 +6,10 @@
 
 // configurable gestures (settings.btnAct[]):
 //   single click / double click / hold 2s / hold 8s
+// Hold actions fire on RELEASE, by the threshold reached: firing the 2s
+// slot right at the 2s mark would (with the default "reboot" there) restart
+// the board before the 8s action can ever run, and keep restarting in a
+// loop while the button stays pressed.
 
 #define BTN_DEBOUNCE_MS 25
 #define BTN_HOLD2_MS    2000
@@ -94,8 +98,6 @@ void buttonLoop() {
   static bool raw = false;
   static uint32_t rawSince = 0;
   static uint32_t downAt = 0;
-  static bool actHold2 = false;
-  static bool actHold8 = false;
   static uint32_t pendingClickAt = 0;  // 1st click waiting for a possible 2nd
 
   bool r = (digitalRead(PIN_BTN) == LOW);
@@ -120,31 +122,25 @@ void buttonLoop() {
   if (pressed && !down) {
     down = true;
     downAt = now;
-    actHold2 = false;
-    actHold8 = false;
-    return;
-  }
-
-  if (down && pressed) {
-    uint32_t held = now - downAt;
-    if (!actHold2 && held >= BTN_HOLD2_MS) {
-      actHold2 = true;
-      pendingClickAt = 0;  // this press is a hold, not a click
-      runAction(settings.btnAct[2]);
-    }
-    if (!actHold8 && held >= BTN_HOLD8_MS) {
-      actHold8 = true;
-      pendingClickAt = 0;
-      runAction(settings.btnAct[3]);
-    }
     return;
   }
 
   if (!pressed && down) {
     down = false;
     uint32_t held = now - downAt;
-    if (actHold2 || actHold8) return;  // already handled while held
-    if (held >= BTN_HOLD2_MS) return;  // just crossed the threshold on release
+
+    // hold gestures: which slot fires is decided by how long the button
+    // was held IN TOTAL, when it's released (see the comment on top)
+    if (held >= BTN_HOLD8_MS) {
+      pendingClickAt = 0;  // this was a hold, not a click
+      runAction(settings.btnAct[3]);
+      return;
+    }
+    if (held >= BTN_HOLD2_MS) {
+      pendingClickAt = 0;
+      runAction(settings.btnAct[2]);
+      return;
+    }
     if (pendingClickAt) {
       pendingClickAt = 0;
       // quick 2nd press = double click; a slower one just completes

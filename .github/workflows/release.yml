@@ -1,0 +1,107 @@
+# Release build: on every push to main, check FW_VERSION in src/settings.h.
+# If a GitHub release for that exact version does not exist yet (i.e. the
+# version was bumped), build the firmware and publish it as a release.
+# Assets mirror scripts/make_webflash.bat: bootloader + partitions + firmware
+# + manifest.json. No merged bin (it pads gaps with 0xFF and wipes NVS), no
+# LittleFS part (the web UI is embedded in firmware.bin).
+#
+# Release tags are "v<FW_VERSION>" — the firmware's online update check
+# (src/ota.cpp) matches them against the releases/latest feed.
+
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read FW_VERSION
+        id: ver
+        run: echo "version=$(sed -n 's/^#define FW_VERSION \"\(.*\)\"/\1/p' src/settings.h)" >> "$GITHUB_OUTPUT"
+
+      - name: Was the version bumped?
+        id: chk
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          if gh release view "v$V" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release v$V already exists — FW_VERSION not bumped, skipping build."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "New version v$V, building..."
+          fi
+
+      - uses: actions/cache@v4
+        if: steps.chk.outputs.exists == 'false'
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+
+      - uses: actions/setup-python@v5
+        if: steps.chk.outputs.exists == 'false'
+        with:
+          python-version: '3.x'
+
+      - name: Install PlatformIO
+        if: steps.chk.outputs.exists == 'false'
+        run: pip install platformio
+
+      - name: Build firmware
+        if: steps.chk.outputs.exists == 'false'
+        run: pio run
+
+      - name: Package
+        if: steps.chk.outputs.exists == 'false'
+        env:
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          OUT="dist/hexaddon-$V"
+          mkdir -p "$OUT"
+          cp .pio/build/esp32c3/bootloader.bin "$OUT/"
+          cp .pio/build/esp32c3/partitions.bin "$OUT/"
+          cp .pio/build/esp32c3/firmware.bin "$OUT/"
+          # offsets are decimal (same as make_webflash.bat):
+          # 0x0, 0x8000, 0x10000
+          cat > "$OUT/manifest.json" <<EOF
+          {
+            "schemaVersion": 1,
+            "name": "HEXADDON",
+            "version": "$V",
+            "new_install_prompt_erase": false,
+            "builds": [
+              {
+                "chipFamily": "ESP32-C3",
+                "parts": [
+                  { "path": "bootloader.bin", "offset": 0 },
+                  { "path": "partitions.bin", "offset": 32768 },
+                  { "path": "firmware.bin", "offset": 65536 }
+                ]
+              }
+            ]
+          }
+          EOF
+
+      - name: Create release
+        if: steps.chk.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          gh release create "v$V" \
+            --title "HEXADDON v$V" \
+            --generate-notes \
+            "dist/hexaddon-$V/bootloader.bin" \
+            "dist/hexaddon-$V/partitions.bin" \
+            "dist/hexaddon-$V/firmware.bin" \
+            "dist/hexaddon-$V/manifest.json"

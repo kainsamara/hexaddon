@@ -2,13 +2,18 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.8.2"
+#define FW_VERSION "0.9.2"
+
+// Wi-Fi TX power, dBm (0 = max 11.0). Serial command "TXPWR x" overrides
+// it at runtime for experiments. Lower it when the antenna is mistuned:
+// a strong PA into a bad SWR deafens the receiver's own handshake.
+#define WIFI_TX_POWER_DBM 11.0f
 
 // ---------------- Pins ----------------
 #define PIN_LED   3   // WS2812 data
 #define PIN_SDA   4   // display I2C
 #define PIN_SCL   5   // display I2C
-#define PIN_PWR   8   // addon power enable (HIGH = on) (пин 7 на проде)
+#define PIN_PWR   7   // addon power enable (HIGH = on)
 #define PIN_BTN   9   // button to GND (internal pullup); GPIO9 = BOOT strap: held at reset -> bootloader mode
 #define PIN_IO0   0   // free pin -> addon
 #define PIN_IO1   1   // free pin -> addon
@@ -55,7 +60,7 @@ struct Settings {
   uint8_t colR = 255, colG = 128, colB = 0;
   bool colorRandom = false;    // effects pick random colors
   String order = "GRB";        // wire color order
-  uint16_t powerMa = 3000;     // power limit, 0 = unlimited
+  uint16_t powerMa = 500;     // power limit, 0 = unlimited
 
   // GPIO / addon
   bool addonPower = true;
