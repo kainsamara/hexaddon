@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.9.3"
+#define FW_VERSION "0.9.4"
 
 // Wi-Fi TX power, dBm (0 = max 11.0). Serial command "TXPWR x" overrides
 // it at runtime for experiments. Lower it when the antenna is mistuned:

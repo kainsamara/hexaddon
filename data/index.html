@@ -1368,7 +1368,10 @@ tr.pick:hover td{
   </div>
   <div>
     <h1>HEXADDON</h1>
-    <div class="sub" id="hdrSub"> </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="sub" id="hdrSub"> </div>
+      <button class="btn acc" id="hdrUpd" hidden style="padding:0px 7px;font-size:9px">UPDATE</button>
+    </div>
   </div>
   <div id="hdrRight">
     <button id="themeToggle" type="button" aria-label="Сменить тему" title="Сменить тему">
@@ -1383,7 +1386,7 @@ tr.pick:hover td{
 
 <nav id="tabs">
   <button data-tab="status" class="active">Обзор</button>
-  <button data-tab="leds">Панели</button>
+  <button data-tab="panels">Панели</button>
   <button data-tab="addons">Аддоны</button>
   <button data-tab="wifi">Сеть</button>
   <button data-tab="system">Система</button>
@@ -1440,7 +1443,7 @@ tr.pick:hover td{
      СВЕТ
      ========================================================= -->
 
-<section class="tab" id="tab-leds">
+<section class="tab" id="tab-panels">
 
   <div class="grid">
 
@@ -1845,7 +1848,7 @@ tr.pick:hover td{
     </div>
 
     <div class="full pairWrap">
-      <div class="card">
+      <div class="card" id="updCard">
         <h3>Обслуживание</h3>
 
         <div class="row">
@@ -1877,6 +1880,24 @@ tr.pick:hover td{
 </section>
 
 </main>
+
+<script>
+/* применить вкладку из якоря синхронно, до первой отрисовки -
+   иначе при обновлении с #... в урле мигает главная страница
+   (полная логика вкладок - в основном скрипте ниже) */
+(function(){
+  var h = (location.hash || '').replace('#','');
+  if(!/^[a-z]+$/.test(h)) return;
+  var b = document.querySelector('#tabs button[data-tab="' + h + '"]');
+  if(!b) return;
+  document.querySelectorAll('#tabs button').forEach(function(x){
+    x.classList.toggle('active', x === b);
+  });
+  document.querySelectorAll('section.tab').forEach(function(s){
+    s.classList.toggle('active', s.id === 'tab-' + h);
+  });
+})();
+</script>
 
 
 <div id="toast"></div>
@@ -2281,6 +2302,10 @@ $('tabs').addEventListener('click',e=>{
 
   if(b.dataset.tab === 'addons')
     requestAnimationFrame(fitCards);
+
+  /* якорь вкладки в урле (#status, #panels, ...) - replaceState,
+     чтобы кнопка "назад" не листала вкладки */
+  history.replaceState(null, '', '#' + b.dataset.tab);
 });
 
 
@@ -2293,13 +2318,24 @@ function goTab(name){
     b.click();
 }
 
+
+/* открыть вкладку из якоря урла: при загрузке страницы и при
+   ручном изменении/переходе по ссылке вида .../#system */
+function tabFromHash(){
+  const h = (location.hash || '').replace('#','');
+  if(document.querySelector('#tabs button[data-tab="' + h + '"]'))
+    goTab(h);
+}
+
+window.addEventListener('hashchange', tabFromHash);
+
 /* =========================================================
    Свайпы влево/вправо - переключение вкладок (тач)
    ========================================================= */
 
 (function(){
 
-  const order = ['status','leds','addons','wifi','system'];
+  const order = ['status','panels','addons','wifi','system'];
 
   const SWIPE_MIN   = 60;    // минимальная длина свайпа, px
   const SWIPE_MAX_Y = 60;    // макс. вертикальное отклонение, px
@@ -5341,12 +5377,12 @@ const TZ_LIST = [
   ['UTC0',   'UTC'],
   ['MSK-2',  'Калининград (МСК−1)'],
   ['MSK-3',  'Москва (МСК)'],
-  ['MSK-4',  'Самара (МСК+1)'],
+  ['MSK-4',  'Ульяновск (МСК+1)'],
   ['MSK-5',  'Екатеринбург (МСК+2)'],
   ['MSK-6',  'Омск (МСК+3)'],
   ['MSK-7',  'Красноярск (МСК+4)'],
   ['MSK-8',  'Иркутск (МСК+5)'],
-  ['MSK-9',  'Якутск (МСК+6)'],
+  ['MSK-9',  'Чита (МСК+6)'],
   ['MSK-10', 'Владивосток (МСК+7)'],
   ['MSK-11', 'Магадан (МСК+8)'],
   ['MSK-12', 'Камчатка (МСК+9)']
@@ -5996,6 +6032,7 @@ async function updCheck(){
   if(st && st.portal){
     $('updLabel').textContent = 'Нет сети';
     $('updBtn').disabled = true;
+    $('hdrUpd').hidden = true;
     return;
   }
 
@@ -6006,6 +6043,7 @@ async function updCheck(){
   }catch(e){
     $('updLabel').textContent = 'Ошибка проверки';
     $('updBtn').disabled = true;
+    $('hdrUpd').hidden = true;
     return;
   }
 
@@ -6020,6 +6058,7 @@ async function updCheck(){
   if(j.error){
     $('updLabel').textContent = 'Ошибка проверки';
     $('updBtn').disabled = true;
+    $('hdrUpd').hidden = true;
     return;
   }
 
@@ -6027,12 +6066,14 @@ async function updCheck(){
     $('updLabel').textContent = 'Доступна версия ' + j.latest;
     $('updLabel').style.color = 'var(--acc)';
     $('updBtn').disabled = false;
+    $('hdrUpd').hidden = false;
     return;
   }
 
   $('updLabel').textContent = 'Система обновлена';
   $('updLabel').style.color = 'var(--dim)';
   $('updBtn').disabled = true;
+  $('hdrUpd').hidden = true;
 }
 
 
@@ -6088,6 +6129,27 @@ $('updBtn').onclick = async ()=>{
   }, 1000);
 
 };
+
+
+/* кнопка в хедере: перейти на вкладку Система и показать
+   карточку Обслуживание, где живёт кнопка «Обновить» */
+$('hdrUpd').onclick = ()=>{
+  goTab('system');
+  setTimeout(()=>{
+    const c = $('updCard');
+    if(c) c.scrollIntoView({behavior:'smooth', block:'center'});
+  }, 80);
+};
+
+
+/* опрос раз в минуту: сервер кэширует результат проверки на 10 минут,
+   так что в GitHub реально уходим примерно каждым десятым запросом */
+setInterval(
+  ()=>{
+    updCheck();
+  },
+  60000
+);
 
 
 /* =========================================================
@@ -6252,6 +6314,8 @@ async function init(){
 
   if(st.portal)
     goTab('wifi');
+  else
+    tabFromHash();
 }
 
 init();
