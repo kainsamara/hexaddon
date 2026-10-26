@@ -2869,7 +2869,7 @@ function animPresetHtml(i){
   if(cur === 'none') cur = 'offzone2024';
 
   return `
-  <div class="row rowcol" style="width:100%">
+  <div class="row rowcol" style="width:100%;border-bottom:none">
     <span class="lab">Пресет</span>
     <select data-role="animPreset" style="width:200px">      
       <option value="addon2022"${cur==='addon2022'?' selected':''}>ADDON 2022</option>
@@ -3127,7 +3127,7 @@ function sensorCardHtml(se){
 
     ${row('Микросхема', 'seChip', esc(se.chip || '--'))}
 
-    <div class="row">
+    <div class="row" style="border-bottom:none">
       <span class="lab">Коррекция</span>
       <span class="val" style="display:flex;align-items:center;gap:10px">
         <button type="button" class="btn" data-role="toffm" style="padding:2px 10px">◀</button>
