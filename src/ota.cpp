@@ -8,9 +8,10 @@
 
 #include "settings.h"  // FW_VERSION
 
-// Release feed of this project. The tag is "v<FW_VERSION>" (see release.yml),
-// the asset "firmware.bin" is the OTA image (same file the web flasher uses).
-#define GH_RELEASE_API "https://api.github.com/repos/kainsamama/hexaddon/releases/latest"
+// Release feed of this project (keep in sync with the git remote / CI).
+// The tag is "v<FW_VERSION>" (see release.yml), the asset "firmware.bin"
+// is the OTA image (same file the web flasher uses).
+#define GH_RELEASE_API "https://api.github.com/repos/kainsamara/hexaddon/releases/latest"
 #define REBOOT_DELAY_MS 4000UL   // let the UI pick up the final status
 
 static OtaState st;
