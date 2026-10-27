@@ -367,9 +367,12 @@ static void drawInfo(Adafruit_GFX &d) {
   String l[5];
 
   if (netIsPortal()) {
-    l[0] = "SETUP MODE";
+    // the AP itself failed to start: the web UI is unreachable — say so
+    // on the screen instead of showing a network nobody can join
+    bool apBad = netApFailed();
+    l[0] = apBad ? "AP START FAILED" : "SETUP MODE";
     l[1] = "AP: " + fitStr(String(WiFi.softAPSSID()), 17);
-    l[2] = "Open network";
+    l[2] = apBad ? "Web UI unreachable!" : "Open network";
     l[3] = "IP: " + WiFi.softAPIP().toString();
     if (settings.wifiConfigured) {
       l[4] = "No conn: " + fitStr(settings.wifiSsid, 12);

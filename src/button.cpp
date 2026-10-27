@@ -76,6 +76,7 @@ static void runAction(uint8_t a) {
 
     case BTN_REBOOT:
       displayToast("Reboot...");
+      sensorHistFlush();  // keep the chart across this reboot
       delay(300);
       ESP.restart();
       break;
@@ -83,6 +84,7 @@ static void runAction(uint8_t a) {
     case BTN_WIFI:
       displayToast("Wi-Fi reset...");
       settings.clearWifi();
+      sensorHistFlush();  // keep the chart across this reboot
       delay(400);
       ESP.restart();
       break;

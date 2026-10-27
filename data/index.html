@@ -92,6 +92,7 @@ html[data-theme="light"] .card{
 html[data-theme="light"] input[type=text],
 html[data-theme="light"] input[type=password],
 html[data-theme="light"] input[type=number],
+html[data-theme="light"] input[type=time],
 html[data-theme="light"] select{
   background:#fff;
   border-color:#c8cedb;
@@ -101,6 +102,7 @@ html[data-theme="light"] select{
 html[data-theme="light"] input[type=text]:focus,
 html[data-theme="light"] input[type=password]:focus,
 html[data-theme="light"] input[type=number]:focus,
+html[data-theme="light"] input[type=time]:focus,
 html[data-theme="light"] select:focus{
   border-color:#d98a00;
   box-shadow:0 0 0 3px rgba(255,176,32,.22)
@@ -509,14 +511,14 @@ section.tab.active{
 }
 
 .dashBtn .dashState{
-  font-size:15px;
+  font-size:13px;
   font-weight:700;
   color:var(--fg);
   line-height:1.15
 }
 
 .dashBtn .dashSub{
-  font-size:12px;
+  font-size:14px;
   color:var(--dim);
   line-height:1.2
 }
@@ -538,6 +540,18 @@ section.tab.active{
 .dashBtn.dashInfo:hover{
   border-color:var(--line);
   color:var(--dim)
+}
+
+/* карточки расписания в Обзоре: та же ширина, что у Быстрого
+   управления; 4 текстовые строки — высота по содержимому */
+#dashSched .dashBtn{
+  height:auto;
+  min-height:170px
+}
+
+#dashSched .dashTitle{
+  text-transform:none;
+  letter-spacing:.02em
 }
 
 .card{
@@ -567,11 +581,15 @@ section.tab.active{
   grid-column:1/-1
 }
 
-/* дашборд схлопывается по ширине к содержимому и центрируется */
-#dashCard{
+/* Быстрое управление + Расписание: одинаковая ширина по более широкому
+   из них; весь блок схлопывается к содержимому и центрируется */
+#dashWrap{
+  grid-column:1/-1;
   width:fit-content;
   max-width:100%;
-  justify-self:center
+  justify-self:center;
+  display:grid;
+  gap:12px
 }
 
 #i2cCards .card.wide{
@@ -635,6 +653,7 @@ section.tab.active{
 input[type=text],
 input[type=password],
 input[type=number],
+input[type=time],
 select{
   background:var(--card2);
   border:1px solid var(--line);
@@ -648,6 +667,7 @@ select{
 input[type=text]:focus,
 input[type=password]:focus,
 input[type=number]:focus,
+input[type=time]:focus,
 select:focus{
   outline:none;
   border-color:var(--acc)
@@ -810,10 +830,86 @@ button.btn:disabled{
 
 /* дни недели в правилах расписания - компактнее обычных кнопок */
 #schedRules button.day{
-  padding:3px 7px;
-  font-size:12px;
+  padding:3px 8px;
+  font-size:14px;
   line-height:1.2;
-  border-radius:5px
+  border-radius:6px
+}
+
+/* правило расписания: обе строки всегда в одну линию; на узком блоке
+   шрифт и высота элементов пропорционально уменьшаются (масштаб --sk
+   считает fitSched), все элементы строки одной высоты --sh */
+#schedRules{
+  --sk:1;
+  --sh:calc(32px*var(--sk))
+}
+
+#schedRules .srow{
+  display:flex;
+  align-items:center;
+  gap:calc(5px*var(--sk));
+  flex-wrap:nowrap;
+  min-width:0
+}
+
+#schedRules .srow select,
+#schedRules .srow input[type=time]{
+  font-size:calc(14px*var(--sk));
+  height:var(--sh);
+  box-sizing:border-box;
+  padding:0 calc(8px*var(--sk));
+  border-radius:calc(7px*var(--sk))
+}
+
+#schedRules .srow input[type=time]{
+  width:6.4em
+}
+
+#schedRules button.day{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:calc(13px*var(--sk));
+  height:var(--sh);
+  box-sizing:border-box;
+  padding:0 calc(7px*var(--sk));
+  line-height:1.2;
+  border-radius:6px
+}
+
+#schedRules .btn.danger{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:calc(13px*var(--sk));
+  height:var(--sh);
+  box-sizing:border-box;
+  padding:0 calc(9px*var(--sk))
+}
+
+/* настоящий тумблер (--sw с чекбоксом) растягиваем под высоту строки */
+#schedRules .sw:has(input){
+  width:calc(var(--sh)*1.72);
+  height:var(--sh)
+}
+
+#schedRules .sw:has(input) span:before{
+  width:calc(var(--sh) - 8px*var(--sk));
+  height:calc(var(--sh) - 8px*var(--sk));
+  left:calc(4px*var(--sk));
+  top:calc(4px*var(--sk))
+}
+
+#schedRules .sw:has(input) input:checked + span:before{
+  transform:translateX(calc(var(--sh)*0.72))
+}
+
+/* label-обёртка вокруг ✕ — тоже под высоту строки, без фикс. размера .sw */
+#schedRules .sw:not(:has(input)){
+  width:auto;
+  height:var(--sh);
+  display:inline-flex;
+  align-items:center
 }
 
 .btns{
@@ -1327,7 +1423,8 @@ html[data-theme="light"] #toast.err{
 
 /* полноэкранный график датчика (клик по термометру) */
 .modalBox.histBox{
-  width:min(96vw,980px)
+  width:min(96vw,980px);
+  position:relative  /* якорь для тултипа графика */
 }
 
 #histCv{
@@ -1337,6 +1434,28 @@ html[data-theme="light"] #toast.err{
   background:var(--card2);
   border:1px solid var(--line);
   border-radius:8px
+}
+
+/* строка выбора периода опроса (в модалке графика, перед кнопками) */
+.histStepRow{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap
+}
+
+/* тултип точки графика: время + значение ближайшего параметра */
+#histTip{
+  position:absolute;
+  pointer-events:none;
+  background:var(--card2);
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:6px 9px;
+  font-size:12px;
+  line-height:1.5;
+  white-space:nowrap;
+  z-index:5
 }
 
 .modalBox h3{
@@ -1484,8 +1603,11 @@ html[data-theme="light"] #toast.err{
 
   <div class="grid">
 
+    <!-- Быстрое управление + Расписание: равная ширина по большему -->
+    <div id="dashWrap">
+
     <!-- Быстрое управление + устройства -->
-    <div class="card full" id="dashCard">
+    <div class="card" id="dashCard">
       <h3>Быстрое управление</h3>
 
       <div class="dashGrid">
@@ -1515,6 +1637,14 @@ html[data-theme="light"] #toast.err{
         <div class="contents" id="dashDevs"></div>
 
       </div>
+    </div>
+
+    <!-- Правила из Панелей -> «Включение по расписанию» -->
+    <div class="card" id="schedCard" hidden>
+      <h3>Расписание</h3>
+      <div class="dashGrid" id="dashSched"></div>
+    </div>
+
     </div>
   </div>
 
@@ -1633,7 +1763,7 @@ html[data-theme="light"] #toast.err{
           <span class="hint">мА, 0 - без ограничения</span>
         </span>
 
-        <span class="val" id="ledMaVal">-- мА</span>
+        <span class="val" id="ledMaVal" title="Средний ток ленты за последние ~3 секунды">-- мА</span>
         <input
           type="number"
           id="powerMa"
@@ -2022,7 +2152,19 @@ html[data-theme="light"] #toast.err{
     <h3 id="histTitle">Датчик</h3>
     <div class="stats" id="histNow"></div>
     <canvas id="histCv"></canvas>
+    <div id="histTip" hidden></div>
     <div class="btns">
+      <span class="lab">Период логирования</span>
+      <select id="histStep">
+        <option value="1">1 мин</option>
+        <option value="2">2 мин</option>
+        <option value="5">5 мин</option>
+        <option value="10">10 мин</option>
+        <option value="15">15 мин</option>
+        <option value="30">30 мин</option>
+      </select>
+      <span style="flex:1"></span>
+      <button class="btn" id="histSave" type="button">Скачать JSON</button>
       <button class="btn acc" id="histClose" type="button">Закрыть</button>
     </div>
   </div>
@@ -3309,7 +3451,7 @@ function sensorCardHtml(se){
   return `
   <div class="card">
 
-    <h3><span data-role="histBtn" title="Подробный график за 24 часа" style="cursor:pointer">${ICO_SENS}</span>Датчик${a}</h3>
+    <h3><span data-role="histBtn" title="График: последние 100 точек, период настраивается" style="cursor:pointer">${ICO_SENS}</span>Датчик${a}</h3>
 
     ${row('Микросхема', 'seChip', esc(se.chip || '--'))}
 
@@ -3334,6 +3476,9 @@ function sensorCardHtml(se){
    ========================================================= */
 
 let histTimer = null;
+
+/* координаты точек последней отрисовки — для тултипа при наведении */
+let histPts = [];
 
 function histNowHtml(s){
   const stat = (k, v) =>
@@ -3376,10 +3521,12 @@ function drawHist(cv, j, synced){
   const [c, W, H] = histCtx(cv);
   c.clearRect(0, 0, W, H);
 
-  const t = j.t || [], h = j.h || [], ts = j.ts || [];
+  const t = j.t || [], h = j.h || [], p = j.p || [], ts = j.ts || [];
   const n = t.length;
   const PL = 46, PR = 44, PT = 16, PB = 22;  // поля под подписи
   const iw = W - PL - PR, ih = H - PT - PB;
+
+  histPts = [];
 
   c.strokeStyle = 'rgba(128,140,160,.25)';
   c.lineWidth = 1;
@@ -3397,7 +3544,7 @@ function drawHist(cv, j, synced){
     c.font = '13px sans-serif';
     c.textAlign = 'center';
     c.fillText(
-      'пока мало данных — датчику нужно поработать',
+      'Пока мало данных - датчику нужно поработать подольше',
       W / 2, H / 2
     );
     return;
@@ -3431,16 +3578,49 @@ function drawHist(cv, j, synced){
     mx = mid + 2.5;
   }
 
-  let hasH = false;
+  const yT = v => PT + (1 - (v - mn) / (mx - mn)) * ih;
 
-  for(let i=0; i<n; i++)
-    if(h[i] >= 0)
-      hasH = true;
+  let hasH = false, hasP = false;
+
+  for(let i=0; i<n; i++){
+    if(h[i] >= 0) hasH = true;
+    if(p[i] > 0) hasP = true;
+  }
+
+  /* давление: своя шкала mmHg (значения в десятых) */
+  let pmn = Infinity, pmx = -Infinity;
+
+  if(hasP){
+    for(let i=0; i<n; i++){
+      if(p[i] <= 0) continue;
+      if(p[i] < pmn) pmn = p[i];
+      if(p[i] > pmx) pmx = p[i];
+    }
+    if(pmx - pmn < 50){  // плоско: ±2.5 mmHg вокруг середины
+      const mid = (pmx + pmn) / 2;
+      pmn = mid - 25;
+      pmx = mid + 25;
+    }
+  }
+
+  const yP = v => PT + (1 - (v - pmn) / (pmx - pmn)) * ih;
 
   /* дырка > 2.5 интервалов = датчик был выключен: рвём линию */
   const gap = i =>
     i > 0 && synced &&
     ts[i] - ts[i - 1] > (j.interval || 5) * 60 * 2.5;
+
+  /* координаты точек для тултипа (css-пиксели, как в canvas) */
+  for(let i=0; i<n; i++){
+    histPts.push({
+      x: xOf(i),
+      yT: yT(t[i]),
+      yH: h[i] >= 0 ? PT + (1 - h[i] / 100) * ih : null,
+      yP: hasP && p[i] > 0 ? yP(p[i]) : null,
+      ts: ts[i] || 0,
+      t: t[i], h: h[i], p: p[i]
+    });
+  }
 
   /* влажность: правая шкала 0..100% */
   if(hasH){
@@ -3466,6 +3646,31 @@ function drawHist(cv, j, synced){
     c.fillText('0%', W - PR + 6, PT + ih);
   }
 
+  /* давление: линия + внутренняя правая шкала mmHg (чтобы не
+     сталкиваться с подписями влажности снаружи) */
+  if(hasP){
+    c.strokeStyle = '#34d399';
+    c.lineWidth = 1.5;
+    c.beginPath();
+    let started = false;
+
+    for(let i=0; i<n; i++){
+      if(p[i] <= 0) continue;
+      const x = xOf(i);
+      const y = yP(p[i]);
+      if(!started || gap(i)){ c.moveTo(x, y); started = true; }
+      else c.lineTo(x, y);
+    }
+
+    c.stroke();
+
+    c.fillStyle = '#34d399';
+    c.font = '11px sans-serif';
+    c.textAlign = 'right';
+    c.fillText((pmx / 10).toFixed(0), W - PR - 6, PT + 4);
+    c.fillText((pmn / 10).toFixed(0), W - PR - 6, PT + ih);
+  }
+
   /* температура: линия + точка на каждом записанном значении */
   c.strokeStyle = '#f5a623';
   c.lineWidth = 1.5;
@@ -3473,7 +3678,7 @@ function drawHist(cv, j, synced){
 
   for(let i=0; i<n; i++){
     const x = xOf(i);
-    const y = PT + (1 - (t[i] - mn) / (mx - mn)) * ih;
+    const y = yT(t[i]);
     if(i === 0 || gap(i)) c.moveTo(x, y);
     else c.lineTo(x, y);
   }
@@ -3483,18 +3688,30 @@ function drawHist(cv, j, synced){
   c.fillStyle = '#f5a623';
 
   for(let i=0; i<n; i++){
-    const x = xOf(i);
-    const y = PT + (1 - (t[i] - mn) / (mx - mn)) * ih;
     c.beginPath();
-    c.arc(x, y, 1.6, 0, 7);
+    c.arc(xOf(i), yT(t[i]), 1.6, 0, 7);
     c.fill();
   }
 
   /* подписи осей */
   c.font = '11px sans-serif';
   c.textAlign = 'right';
+  c.fillStyle = '#f5a623';
   c.fillText((mx / 10).toFixed(1), PL - 5, PT + 4);
   c.fillText((mn / 10).toFixed(1), PL - 5, PT + ih);
+
+  /* легенда сверху: какая линия какой параметр */
+  c.font = '11px sans-serif';
+  c.textAlign = 'left';
+  let lx = PL + 6;
+  const lg = [['T °C', '#f5a623']];
+  if(hasH) lg.push(['H %', '#4a9eff']);
+  if(hasP) lg.push(['P mmHg', '#34d399']);
+  for(const it of lg){
+    c.fillStyle = it[1];
+    c.fillText(it[0], lx, PT - 5);
+    lx += c.measureText(it[0]).width + 12;
+  }
 
   c.fillStyle = 'rgba(128,140,160,.9)';
   c.textAlign = 'left';
@@ -3508,6 +3725,74 @@ function drawHist(cv, j, synced){
     c.fillText('время не синхронизировано', W / 2, H - 7);
   }
 }
+
+
+/* тултип графика: время точки + значение ближайшего к курсору
+   параметра (T/H/P); прячется, когда курсор ушёл от точек */
+$('histCv').addEventListener('mousemove', e=>{
+
+  const tip = $('histTip');
+  const cv = $('histCv');
+
+  const mx = e.offsetX, my = e.offsetY;
+
+  let best = null, bd = 18;
+
+  for(const q of histPts){
+    const d = Math.abs(q.x - mx);
+    if(d < bd){ bd = d; best = q; }
+  }
+
+  if(!best){
+    tip.hidden = true;
+    return;
+  }
+
+  /* какая из линий ближе по вертикали - тот параметр и показываем */
+  let what = 'T', wy = Math.abs(best.yT - my);
+
+  if(best.yH != null && Math.abs(best.yH - my) < wy){
+    what = 'H';
+    wy = Math.abs(best.yH - my);
+  }
+
+  if(best.yP != null && Math.abs(best.yP - my) < wy){
+    what = 'P';
+  }
+
+  const when = best.ts > 1700000000
+    ? fmtTs(best.ts)
+    : 'время не синхронизировано';
+
+  const val =
+    what === 'T' ? 'T ' + (best.t / 10).toFixed(1) + ' °C'
+  : what === 'H' ? 'H ' + best.h + ' %'
+  :                'P ' + (best.p / 10).toFixed(0) + ' mmHg';
+
+  tip.innerHTML =
+    '<b>' + esc(when) + '</b><br>' + esc(val);
+  tip.hidden = false;
+
+  /* позиция у точки, внутри модалки, без выхода за края */
+  const par = cv.parentElement;
+  const qy = best['y' + what];
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+
+  let lx = cv.offsetLeft + best.x + 12;
+  if(lx + tw > par.clientWidth - 4)
+    lx = cv.offsetLeft + best.x - tw - 12;
+  if(lx < 4) lx = 4;
+
+  let ly = cv.offsetTop + qy - th - 8;
+  if(ly < 4) ly = cv.offsetTop + qy + 12;
+
+  tip.style.left = lx + 'px';
+  tip.style.top = ly + 'px';
+});
+
+$('histCv').addEventListener('mouseleave', ()=>{
+  $('histTip').hidden = true;
+});
 
 
 async function loadHist(){
@@ -3557,6 +3842,12 @@ function openHist(){
   $('histNow').innerHTML = histNowHtml(s);
   $('histModal').hidden = false;
 
+  /* текущий период опроса из конфига устройства */
+  const hs = $('histStep');
+  if(hs)
+    hs.value =
+      String(cfg && cfg.histStepMin ? cfg.histStepMin : 5);
+
   loadHist();
 
   clearInterval(histTimer);
@@ -3583,12 +3874,103 @@ function closeHist(){
   clearInterval(histTimer);
 }
 
+
+/* выгрузка истории в файл: метаданные устройства + точка на элемент */
+async function exportHist(){
+
+  let j = null;
+
+  try{
+    j = await jget('/api/sensor/history', 8000);
+  }catch(e){
+    toast('Ошибка: ' + errMsg(e), true);
+    return;
+  }
+
+  if(!j || !j.t || !j.t.length){
+    toast('Данные пока не собраны', true);
+    return;
+  }
+
+  const pts = [];
+
+  for(let i = 0; i < j.t.length; i++){
+
+    const ts = (j.ts && j.ts[i]) || 0;
+    const ok = ts > 1700000000;
+
+    pts.push({
+      ts: ok ? ts : null,
+      time: ok ? new Date(ts * 1000).toISOString() : null,
+      tempC: j.t[i] / 10,
+      humidity: (j.h && j.h[i] >= 0) ? j.h[i] : null,
+      pressureMmHg: (j.p && j.p[i] > 0) ? j.p[i] / 10 : null
+    });
+
+  }
+
+  const doc = {
+    device: 'HEXADDON' + (st && st.version ? ' v' + st.version : ''),
+    sensor: st && st.sensor ? (st.sensor.chip || null) : null,
+    exported: new Date().toISOString(),
+    intervalMin: j.interval || 5,
+    points: pts
+  };
+
+  const blob = new Blob(
+    [JSON.stringify(doc, null, 2)],
+    {type: 'application/json'}
+  );
+
+  const a = document.createElement('a');
+
+  a.href = URL.createObjectURL(blob);
+
+  const d = new Date();
+  const p = n => (n < 10 ? '0' : '') + n;
+
+  a.download =
+    'hexaddon-history-' +
+    d.getFullYear() +
+    p(d.getMonth() + 1) +
+    p(d.getDate()) +
+    '-' +
+    p(d.getHours()) +
+    p(d.getMinutes()) +
+    '.json';
+
+  document.body.appendChild(a);
+  a.click();
+
+  setTimeout(()=>{
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 2000);
+}
+
 $('i2cCards').addEventListener('click', e=>{
   if(e.target.closest('[data-role="histBtn"]'))
     openHist();
 });
 
 $('histClose').onclick = closeHist;
+
+$('histSave').onclick = exportHist;
+
+/* смена периода опроса: сохраняем в конфиг устройства (кольцо на
+   устройстве сбросится само) и сразу подтягиваем опустевший график */
+$('histStep').onchange = e=>{
+
+  if(!cfg) return;
+
+  const v = parseInt(e.target.value, 10) || 5;
+
+  if(v === cfg.histStepMin) return;
+
+  cfg.histStepMin = v;
+  saveNow();
+  loadHist();
+};
 
 $('histModal').addEventListener('click', e=>{
   if(e.target === $('histModal'))
@@ -4207,23 +4589,11 @@ const DUR_OPTS = [
 
 
 function schedRuleHtml(r, ix){
-  let hs = '', ms = '';
-
-  for(let h=0; h<24; h++)
-    hs +=
-      '<option value="' + h + '"' + (r.h===h ? ' selected' : '') + '>' +
-        (h < 10 ? '0' : '') + h +
-      '</option>';
-
-  for(let m=0; m<60; m++)
-    ms +=
-      '<option value="' + m + '"' + (r.m===m ? ' selected' : '') + '>' +
-        (m < 10 ? '0' : '') + m +
-      '</option>';
+  const pad = n => (n < 10 ? '0' : '') + n;
 
   let ds = '';
 
-  for(let d=0; d<7; d++){
+  for(let d = 0; d < 7; d++){
     const on = (r.days >> d) & 1;
     ds +=
       '<button type="button" class="btn day' + (on ? ' acc' : '') + '"' +
@@ -4233,33 +4603,36 @@ function schedRuleHtml(r, ix){
       '</button>';
   }
 
+  const durOpts =
+    DUR_OPTS.map(
+      o =>
+        '<option value="' + o[0] + '"' +
+        (r.dur === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'
+    ).join('');
+
   return `
-  <div data-ix="${ix}" style="border-bottom:1px dashed #232833;padding:0px 0 5px">
-    <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:center;padding:0px 0 7px">${ds}</div>
-    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-      <select data-f="h" style="width:55px">${hs}</select>
-      <select data-f="m" style="width:55px">${ms}</select>
-      <select data-f="act" style="width:104px">
-        <option value="1"${r.act ? ' selected' : ''}>Включить</option>
-        <option value="0"${!r.act ? ' selected' : ''}>Отключить</option>
+  <div data-ix="${ix}" style="border-bottom:1px dashed #232833;padding:5px 0 5px">
+    <div class="srow">
+      ${ds}
+      <span style="flex:1"></span>
+      <label class="sw" title="Правило активно">
+        <input type="checkbox" data-f="on"${r.on ? ' checked' : ''}><span></span>
+      </label>
+      <label class="sw" title="Удалить правило">
+      <button type="button" class="btn danger" data-del="1">✕</button>
+      </label>
+    </div>
+    <div class="srow" style="margin-top:calc(5px*var(--sk))">
+      <input type="time" data-f="time" value="${pad(r.h)}:${pad(r.m)}">
+      <select data-f="act">
+        <option value="1"${r.act ? ' selected' : ''}>Вкл</option>
+        <option value="0"${!r.act ? ' selected' : ''}>Откл</option>
       </select>
-      <label class="sw"><input type="checkbox" data-f="on"${r.on ? ' checked' : ''}><span></span></label>
-      <select data-f="dur" style="width:60px">
-        ${
-          DUR_OPTS.map(
-            o =>
-              '<option value="' + o[0] + '"' +
-              (r.dur === o[0] ? ' selected' : '') + '>' +
-                o[1] +
-              '</option>'
-          ).join('')
-        }
-      </select>
-      <select data-f="tgt" style="width:110px">
+      <select data-f="tgt">
+        <option value="light"${r.tgt !== 'power' ? ' selected' : ''}>Подсветку</option>
         <option value="power"${r.tgt === 'power' ? ' selected' : ''}>Питание</option>
-        <option value="light"${r.tgt !== 'power' ? ' selected' : ''}>Подсветка</option>
       </select>
-      <button type="button" class="btn danger" data-del="1" style="padding:4px 10px">✕</button>
+      <select data-f="dur">${durOpts}</select>
     </div>
   </div>`;
 }
@@ -4280,9 +4653,39 @@ function renderSched(){
       })
       .join('');
 
-  $('schedAdd').disabled =
-    cfg.sched.length >= 8;
+  /* при максимуме правил кнопку не прячем в disabled, а убираем совсем */
+  $('schedAdd').style.display =
+    cfg.sched.length >= 8 ? 'none' : '';
+
+  renderDashSched();
+  fitSched();
 }
+
+/* масштаб правил расписания: строки без переноса, при узком блоке шрифт и
+   высота уменьшаются пропорционально (--sk), чтобы обе строки влезали */
+function fitSched(){
+  const box = $('schedRules');
+
+  if(!box || !box.querySelectorAll('.srow').length)
+    return;
+
+  box.style.setProperty('--sk', 1);  // честный замер при базовом масштабе
+
+  const w = box.clientWidth;
+  let need = 0;
+
+  box.querySelectorAll('.srow').forEach(row=>{
+    need = Math.max(need, row.scrollWidth);
+  });
+
+  const k = need > w && need > 0 ? Math.max(w/need, 0.65) : 1;
+
+  box.style.setProperty('--sk', k.toFixed(3));
+}
+
+/* пересчёт при любом изменении размера контейнера: показ вкладки Панели,
+   resize окна, перестройка списка правил */
+new ResizeObserver(()=>fitSched()).observe($('schedRules'));
 
 
 $('schedAdd').onclick = ()=>{
@@ -4338,6 +4741,7 @@ $('schedRules').addEventListener('click', e=>{
     day.classList.toggle('acc', on);
     day.style.opacity = on ? '' : '.5';
     saveNow(0);
+    renderDashSched();
   }
 });
 
@@ -4362,6 +4766,11 @@ $('schedRules').addEventListener('change', e=>{
 
   if(f === 'on')
     r.on = e.target.checked;
+  else if(f === 'time'){
+    const p = e.target.value.split(':');
+    r.h = +(p[0] || 0);
+    r.m = +(p[1] || 0);
+  }
   else if(f === 'h')
     r.h = +e.target.value;
   else if(f === 'm')
@@ -4374,6 +4783,148 @@ $('schedRules').addEventListener('change', e=>{
     r.tgt = e.target.value;
 
   saveNow(0);
+  renderDashSched();
+});
+
+
+/* =========================================================
+   Обзор: карточки расписания (те же правила, что в Панелях)
+   ========================================================= */
+
+/* часы устройства синхронизированы? (до NTP время стоит около 1970/2020) */
+function schedClockOk(){
+  return st && typeof st.now === 'number' && st.now > 1700000000;
+}
+
+/* смещение локальной зоны устройства в секундах: cfg.tz — POSIX-строка
+   вида "UTC-3" (знак по POSIX инвертирован: UTC-3 = UTC+3) */
+function schedTzOff(){
+  const m = ((cfg && cfg.tz) || 'UTC-3').match(/^UTC(?:([+-])(\d+))?$/);
+  if(!m) return 3*3600;
+  if(!m[1]) return 0;
+  return (m[1] === '-' ? 1 : -1) * (+m[2]) * 3600;
+}
+
+/* локальное время устройства в мс */
+function schedLocalMs(){
+  return (st.now + schedTzOff()) * 1000;
+}
+
+/* следующий момент срабатывания правила (в «локальном как UTC» масштабе);
+   null — если не выбран ни один день */
+function schedNextMs(r, localMs){
+  for(let add = 0; add <= 7; add++){
+    const day = new Date(localMs + add*86400000);
+    const dow = (day.getUTCDay()+6)%7;  // bit0=Пн
+
+    if(!((r.days >> dow) & 1))
+      continue;
+
+    const t = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(),
+                       day.getUTCDate(), r.h, r.m);
+
+    if(t > localMs)
+      return t;
+  }
+
+  return null;
+}
+
+function schedWhen(r, localMs){
+  const t = schedNextMs(r, localMs);
+
+  if(t === null)
+    return { t:null, label:'Дни не выбраны' };
+
+  const hh = r.h < 10 ? '0'+r.h : r.h;
+  const mm = r.m < 10 ? '0'+r.m : r.m;
+  const diff = Math.floor(t/86400000) - Math.floor(localMs/86400000);
+  const day = diff === 0 ? 'Сегодня'
+            : diff === 1 ? 'Завтра'
+            : DAY_LBL[(new Date(t).getUTCDay()+6)%7];
+
+  return { t, label: day + ' в ' + hh + ':' + mm };
+}
+
+function schedWho(r){
+  return r.tgt === 'power' ? 'Питание' : 'Подсветка';
+}
+
+function schedAct(r){
+  return (r.act ? 'включится' : 'отключится') +
+         (r.dur ? ' на ' + (r.dur >= 60 ? (r.dur/60) + ' ч' : r.dur + ' м') : '');
+}
+
+function pluralMin(n){
+  const a = n%10, b = n%100;
+  if(a === 1 && b !== 11) return 'минуту';
+  if(a >= 2 && a <= 4 && (b < 12 || b > 14)) return 'минуты';
+  return 'минут';
+}
+
+function schedLeft(t, localMs){
+  const m = Math.round((t - localMs)/60000);
+
+  if(m < 1)  return 'Меньше минуты';
+  if(m < 60) return 'Осталось ' + m + ' ' + pluralMin(m);
+
+  const h = Math.floor(m/60), rm = m%60;
+
+  if(h < 24)
+    return 'Осталось ' + h + ' ч' + (rm ? ' ' + rm + ' м' : '');
+
+  return 'Осталось ' + Math.floor(h/24) + ' д ' + (h%24) + ' ч';
+}
+
+function renderDashSched(){
+  if(!cfg) return;
+
+  const list = Array.isArray(cfg.sched) ? cfg.sched : [];
+  const box = $('schedCard');
+
+  if(!list.length){
+    box.hidden = true;
+    return;
+  }
+
+  box.hidden = false;
+
+  const clock = schedClockOk();
+  const now = clock ? schedLocalMs() : 0;
+
+  $('dashSched').innerHTML = list.map((r,ix)=>{
+
+    const w = clock
+      ? schedWhen(r, now)
+      : { t:null, label:'в ' + (r.h<10?'0'+r.h:r.h) + ':' + (r.m<10?'0'+r.m:r.m) };
+
+    const left = !r.on ? 'Отключено'
+               : !clock ? 'Ждём время'
+               : w.t === null ? 'Дни не выбраны'
+               : schedLeft(w.t, now);
+
+    return '<button type="button" class="dashBtn' + (r.on ? ' on' : '') +
+             '" data-six="' + ix + '">' +
+      '<div class="c">' + w.label + '</div>' +
+      '<div class="dashState">' + schedWho(r) + '</div>' +
+      '<div class="dashState">' + schedAct(r) + '</div>' +
+      '<div class="dashSub">' + left + '</div>' +
+    '</button>';
+  }).join('');
+}
+
+/* клик по карточке = тумблер правила (синхронно с редактором в Панелях) */
+$('dashSched').addEventListener('click', e=>{
+  const b = e.target.closest('[data-six]');
+
+  if(!b || !cfg || !Array.isArray(cfg.sched))
+    return;
+
+  const ix = +b.dataset.six;
+  cfg.sched[ix].on = !cfg.sched[ix].on;
+  saveNow(0);
+  renderDashSched();
+  renderSched();
 });
 
 
@@ -6853,13 +7404,14 @@ async function refreshStatus(){
 
     if(typeof st.ledMa === 'number'){
       const el = $('ledMaVal');
-      if(el) el.textContent = st.ledMa + ' мА';
+      if(el) el.textContent = '\u2248 ' + st.ledMa + ' мА';
     }
 
     renderHeader();
     renderStatus();
     syncCfgFromStatus(t0);
     fitTabs();  // версия/IP в пилюле изменили ширину правой группы
+    renderDashSched();  // тикает «Осталось …» каждым опросом статуса
 
   }finally{
     stBusy = false;

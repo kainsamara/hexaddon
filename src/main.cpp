@@ -51,6 +51,7 @@ static void serialCmd() {
       }
     } else if (buf == "REBOOT") {
       Serial.println(F("[cmd] rebooting"));
+      sensorHistFlush();  // keep the chart across this reboot
       delay(300);
       ESP.restart();
     } else {

@@ -2,9 +2,9 @@
 
 #include <Arduino.h>
 
-// 24 h ring buffer, one point per HIST_STEP_MIN minutes (~864 bytes in RAM)
-#define HIST_N        288
-#define HIST_STEP_MIN 5
+// history ring: the last HIST_N samples, one per settings.histStepMin
+// minutes (1/2/5/10/15/30, default 5) — ~1 KB in RAM
+#define HIST_N 100
 
 void sensorInit();
 void sensorLoop();       // hotplug probe every 3s + read every 2s
@@ -15,8 +15,11 @@ float sensorTemp();      // C, NAN when absent
 float sensorHum();       // %, NAN for BMP280 (no humidity)
 float sensorPres();      // mmHg (converted from hPa)
 
-// last 24 h, oldest first: t[i] = temp ×10 °C, h[i] = humidity % or -1,
-// ts[i] = unix time of the sample (0 = clock was not synced yet) — the
-// chart uses it to auto-scale the time axis and show real gaps.
-// Gaps (sensor absent) are simply skipped.
-int sensorHistory(int16_t *t, int16_t *h, uint32_t *ts, int maxN);
+// oldest first: t[i] = temp ×10 °C, h[i] = humidity % or -1,
+// p[i] = pressure mmHg ×10, ts[i] = unix time of the sample (0 = clock
+// was not synced yet) — the chart uses it to auto-scale the time axis and
+// show real gaps. Gaps (sensor absent) are simply skipped.
+int sensorHistory(int16_t *t, int16_t *h, int16_t *p, uint32_t *ts, int maxN);
+
+void sensorHistFlush();  // push the ring to NVS now (before a graceful reboot)
+void sensorHistClear();  // factory reset: drop the RAM ring so it cannot be re-saved

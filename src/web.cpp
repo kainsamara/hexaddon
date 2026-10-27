@@ -246,6 +246,12 @@ static void fillStatus(JsonDocument &d) {
   d["build"] = buildStamp();  // tells local builds apart (same FW_VERSION)
   d["uptime"] = millis() / 1000;
   d["heap"] = ESP.getFreeHeap();
+  {
+    // локальное время устройства (для карточек расписания в Обзоре):
+    // unix-время; смещение зоны страница считает из cfg.tz (все зоны в
+    // TZ_LIST простые UTC±N, POSIX-формат)
+    d["now"] = (uint32_t)time(nullptr);
+  }
   d["portal"] = netIsPortal();
   d["wifiConfigured"] = settings.wifiConfigured;
 
@@ -270,6 +276,7 @@ static void fillStatus(JsonDocument &d) {
     ap["ssid"] = WiFi.softAPSSID();
     ap["ip"] = WiFi.softAPIP().toString();
     ap["clients"] = WiFi.softAPgetStationNum();
+    ap["failed"] = netApFailed();  // AP never came up: UI is unreachable
   } else {
     d["ap"]["active"] = false;
   }
@@ -358,6 +365,7 @@ static void fillConfig(JsonDocument &d) {
   JsonArray ba = d["btns"].to<JsonArray>();
   for (int i = 0; i < BTN_SLOTS; i++) ba.add(btnActionStr(settings.btnAct[i]));
   d["tempOffset"] = settings.tempOffset;
+  d["histStepMin"] = settings.histStepMin;
   {
     JsonArray sa = d["sched"].to<JsonArray>();
     for (int i = 0; i < MAX_SCHED_RULES; i++) {
@@ -476,6 +484,8 @@ static bool applyConfig(JsonDocument &d) {
   }
   if (d["tempOffset"].is<float>() || d["tempOffset"].is<int>())
     s.tempOffset = constrain((float)d["tempOffset"].as<float>(), -15.0f, 15.0f);
+  if (d["histStepMin"].is<int>())
+    s.histStepMin = (uint8_t)constrain((int)d["histStepMin"], 1, 30);  // sanitize() snaps to a valid step
   if (d["sched"].is<JsonArray>()) {
     // the UI sends the full live list — free slots first, then fill in order
     for (int i = 0; i < MAX_SCHED_RULES; i++) s.sched[i] = SchedRule();
@@ -543,20 +553,39 @@ static void handleConfigPost(HttpSlot &s) {
 // result. (Everything runs in the same loop, the async scan just keeps
 // the radio sweeping in the background instead of blocking us.)
 static bool scanStarted = false;
+static uint32_t scanAt = 0;  // when the scan was kicked off
+
+#define SCAN_STALE_MS 30000UL  // result uncollected this long = garbage
 
 static void handleNetworks(HttpSlot &s) {
   if (!scanStarted) {
     WiFi.scanNetworks(true);
     scanStarted = true;
+    scanAt = millis();
     sendJson(s, 202, "{\"scanning\":true}");
     return;
   }
   int st = WiFi.scanComplete();
+  bool stale = millis() - scanAt > SCAN_STALE_MS;
   if (st == WIFI_SCAN_RUNNING) {
+    // a wedged scan must not leave the page polling "scanning" forever
+    if (stale) {
+      WiFi.scanDelete();
+      scanStarted = false;
+    }
     sendJson(s, 202, "{\"scanning\":true}");
     return;
   }
   if (st < 0) {  // failed / not reported: restart on the next request
+    scanStarted = false;
+    sendJson(s, 202, "{\"scanning\":true}");
+    return;
+  }
+  if (stale) {
+    // finished long ago but nobody collected it (the tab was closed mid
+    // scan): the radio picture may have changed since — drop it and let
+    // the next request start a fresh scan instead of serving the old one
+    WiFi.scanDelete();
     scanStarted = false;
     sendJson(s, 202, "{\"scanning\":true}");
     return;
@@ -662,7 +691,8 @@ static void handleImageGet(HttpSlot &s) {
   static uint8_t buf[IMG_SIZE];  // loop context, no reentry -> .bss, not stack
   ::memset(buf, 0, IMG_SIZE);
   bool exists = displayHasImage(addr);
-  if (exists) displayCopyImage(addr, buf);  JsonDocument d;
+  if (exists) displayCopyImage(addr, buf);
+  JsonDocument d;
   d["addr"] = addrStr(addr);
   d["exists"] = exists;
   d["size"] = IMG_SIZE;
@@ -713,18 +743,20 @@ static void handleReboot(HttpSlot &s) {
 }
 
 static void handleSensorHistory(HttpSlot &s) {
-  static int16_t bt[HIST_N], bh[HIST_N];  // .bss, not stack
+  static int16_t bt[HIST_N], bh[HIST_N], bp[HIST_N];  // .bss, not stack
   static uint32_t bts[HIST_N];
-  int n = sensorHistory(bt, bh, bts, HIST_N);
+  int n = sensorHistory(bt, bh, bp, bts, HIST_N);
   JsonDocument d;
-  d["interval"] = HIST_STEP_MIN;  // minutes between points
+  d["interval"] = settings.histStepMin;  // minutes between points
   d["now"] = (uint32_t)time(nullptr);
   JsonArray ta = d["t"].to<JsonArray>();
   JsonArray ha = d["h"].to<JsonArray>();
+  JsonArray pa = d["p"].to<JsonArray>();
   JsonArray ts = d["ts"].to<JsonArray>();
   for (int i = 0; i < n; i++) {
     ta.add(bt[i]);
     ha.add(bh[i]);
+    pa.add(bp[i]);
     ts.add(bts[i]);
   }
   sendJson(s, 200, docStr(d));
@@ -735,6 +767,7 @@ static void handleFactory(HttpSlot &s) {
   // RAM still holds the old config — a settings.save() in the 800ms
   // restart window (button action, /api/config) would write it back
   settings = Settings();
+  sensorHistClear();  // same for the history ring (flush runs pre-restart)
   LittleFS.remove("/img_3c.xbm");  // legacy images (pre-NVS firmware)
   LittleFS.remove("/img_3d.xbm");
   applyEffects |= EFF_PINS;
@@ -786,11 +819,39 @@ static void handleOtaStatus(HttpSlot &s) {
 
 // ---------------- static ----------------
 
+// If-None-Match check against the raw request head. Header names are
+// case-insensitive, so scan a lowercased copy; the hex etag is unique
+// enough that a substring match after the header name cannot false-positive.
+static bool etagMatches(HttpSlot &s, uint32_t etag) {
+  String h = s.head;
+  h.toLowerCase();
+  int p = h.indexOf("if-none-match:");
+  if (p < 0) return false;
+  return h.indexOf(String(etag, 16), p) >= 0;
+}
+
 static void serveIndex(HttpSlot &s) {
   if (INDEX_HTML_GZ_LEN) {
+    // ETag = FNV-1a over the gzipped page (changes with every build), so
+    // a revisiting browser gets a bodyless 304 instead of ~50 KB again
+    static uint32_t etag = 0;
+    if (!etag) {
+      etag = 2166136261u;
+      for (size_t i = 0; i < INDEX_HTML_GZ_LEN; i++) {
+        etag = (etag ^ INDEX_HTML_GZ[i]) * 16777619u;
+      }
+    }
+    if (etagMatches(s, etag)) {
+      String h = "HTTP/1.1 304 Not Modified\r\nETag: \"" + String(etag, 16) +
+                 "\"\r\nCache-Control: no-cache\r\nConnection: " +
+                 String(s.keepAlive ? "keep-alive" : "close") + "\r\n\r\n";
+      writeAll(s.cli, (const uint8_t *)h.c_str(), h.length());
+      return;
+    }
     // embedded (gzip) page: OTA updates it together with the firmware
+    String extra = "Content-Encoding: gzip\r\nETag: \"" + String(etag, 16) + "\"\r\n";
     respond(s, 200, "text/html; charset=utf-8", (const uint8_t *)INDEX_HTML_GZ,
-            INDEX_HTML_GZ_LEN, "no-cache", "Content-Encoding: gzip\r\n");
+            INDEX_HTML_GZ_LEN, "no-cache", extra.c_str());
     return;
   }
   // fallback for a hand-built firmware without the embedded page
@@ -1014,6 +1075,13 @@ static void serviceSlot(HttpSlot &s) {
     while (s.cli.available()) {
       int n = s.cli.read(buf, sizeof(buf));
       if (n <= 0) break;
+      if (!s.bodyLen && buf[0] != 0xE9) {
+        // not an ESP image (magic byte): reject before burning the slot
+        Update.end(false);
+        sendErr(s, 400, "not a firmware image");
+        resetSlot(s, true);
+        return;
+      }
       if (Update.write(buf, n) != (size_t)n) {
         Update.printError(Serial);
         Update.end(false);
@@ -1084,6 +1152,7 @@ void webLoop() {
   // signed diff: correct across millis() overflow (49 days)
   if (restartAt && (int32_t)(millis() - restartAt) >= 0) {
     restartAt = 0;
+    sensorHistFlush();  // the chart must survive this reboot
     delay(150);
     ESP.restart();
   }

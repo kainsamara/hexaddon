@@ -9,6 +9,7 @@
 
 static DNSServer dns;
 static bool portal = false;
+static bool apFailed = false;  // softAP never came up: web UI unreachable
 static bool mdnsUp = false;
 static bool connecting = false;
 static uint32_t tConnect = 0;
@@ -68,6 +69,7 @@ static void startPortal() {
   }
   dns.start(53, "*", WiFi.softAPIP());
   portal = true;
+  apFailed = !ap;
   retryAt = 0;
   failCount = 0;
   tConnect = millis();
@@ -183,6 +185,13 @@ void netLoop() {
 
 bool netIsPortal() {
   return portal;
+}
+
+// true = the portal AP failed to start (all softAP retries): phones have
+// nothing to connect to, the web UI is unreachable. Reported via
+// /api/status (ap.failed) and shown on the display.
+bool netApFailed() {
+  return portal && apFailed;
 }
 
 // /api/wifi from the portal: connect to the saved network WITHOUT a reboot.

@@ -134,6 +134,7 @@ static uint8_t heat[MAX_LEDS];
 
 static uint8_t lastAnim = 0xFF;
 static int lastN = -1;
+static Scope lastScope = Scope::Panel;
 static bool shownBlack = false;
 
 const char *ledsAnimName(uint8_t idx) {
@@ -562,6 +563,7 @@ void ledsClearFrame() {
   ::memset(frame, 0, sizeof(frame));
   ::memset(heat, 0, sizeof(heat));
   lastAnim = 0xFF;
+  lastScope = settings.scope;  // already zeroed here, no re-clear needed
 }
 
 static void portalFx(int n, uint32_t t) {
@@ -571,10 +573,26 @@ static void portalFx(int n, uint32_t t) {
   }
 }
 
-// last measured strip current (after the power cap), for /api/status
+// last measured strip current (after the power cap) + its short-window
+// average: strobe/flash effects jump 0..N frame to frame, so /api/status
+// reports the average (Q8 fixed point, tau = 3 s). Snapped to 0 at once
+// when the strip is off (rail down / backlight out) — no exponential tail.
 static uint32_t lastMa = 0;
+static uint32_t avgMaQ8 = 0;
+static uint32_t avgT = 0;
 
-uint32_t ledsCurrentMa() { return lastMa; }
+#define MA_TAU_MS 3000UL
+
+uint32_t ledsCurrentMa() { return avgMaQ8 >> 8; }
+
+static void avgMaStep(uint32_t ma, uint32_t now) {
+  uint32_t dt = now - avgT;
+  avgT = now;
+  if (dt > MA_TAU_MS) dt = MA_TAU_MS;  // after a stall: jump to the value
+  uint32_t a = dt * 256 / MA_TAU_MS;   // 0..256 = weight of the new sample
+  if (a > 256) a = 256;
+  avgMaQ8 += (uint32_t)((int32_t)((ma << 8) - avgMaQ8) * (int32_t)a / 256);
+}
 
 void ledsLoop() {
   static uint32_t last = 0;
@@ -603,6 +621,8 @@ void ledsLoop() {
       }
     }
     if (!any) {
+      lastMa = 0;   // dark strip: /api/status must not show a stale draw
+      avgMaQ8 = 0;  // off is off — snap the average too, no decay tail
       if (shownBlack) return;
       shownBlack = true;
     } else {
@@ -610,10 +630,13 @@ void ledsLoop() {
     }
   } else {
     shownBlack = false;
-    if (settings.anim != lastAnim) {
+    // a scope switch re-segments the strip (off changes): stateful effects
+    // (Comet/Sparkle/Fire) must not keep their tails at the old positions
+    if (settings.anim != lastAnim || settings.scope != lastScope) {
       ::memset(frame, 0, sizeof(frame));
       ::memset(heat, 0, sizeof(heat));
       lastAnim = settings.anim;
+      lastScope = settings.scope;
     }
     const Efx &e = EFXS[settings.anim % NUM_ANIMS];
     Col c = {settings.colR, settings.colG, settings.colB};
@@ -647,7 +670,17 @@ void ledsLoop() {
     for (int i = 0; i < n; i++) tmp[i] = scaleCol(tmp[i], mul);
     mA = limit;  // what we actually draw after the cap
   }
-  lastMa = mA;
+  // The strip hangs on the addon power rail: with the rail off it has no
+  // 5V feed and physically draws nothing, however bright the computed
+  // frame is. The frame keeps rendering (so the panel lights up the
+  // instant the rail returns) — but the phantom draw must not be reported.
+  if (!settings.addonPower) {
+    lastMa = 0;
+    avgMaQ8 = 0;  // nothing flows at all: report 0 right away
+  } else {
+    lastMa = mA;
+    avgMaStep(mA, now);  // the UI shows the smoothed value
+  }
   for (int i = 0; i < MAX_LEDS; i++) {
     if (i < n) strip.setPixelColor(i, tmp[i].r, tmp[i].g, tmp[i].b);
     else strip.setPixelColor(i, 0, 0, 0);

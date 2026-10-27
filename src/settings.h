@@ -95,6 +95,11 @@ struct Settings {
   // Sensor temperature correction, °C (-15..15, step 0.5)
   float tempOffset = 0.0f;
 
+  // Sensor history sample period, minutes (1/2/5/10/15/30). The ring keeps
+  // the last HIST_N samples, so this also sets the chart window; a change
+  // resets the ring (mixed spacing would lie on the time axis).
+  uint8_t histStepMin = 5;
+
   // Scheduler (see SchedRule above)
   SchedRule sched[MAX_SCHED_RULES];
 

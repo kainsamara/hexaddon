@@ -129,6 +129,12 @@ void Settings::sanitize() {
   if (tempOffset > 15.0f) tempOffset = 15.0f;
   tempOffset = roundf(tempOffset * 2.0f) / 2.0f;
 
+  // sensor history step: fixed set (the UI select mirrors it exactly)
+  switch (histStepMin) {
+    case 1: case 2: case 5: case 10: case 15: case 30: break;
+    default: histStepMin = 5;
+  }
+
   for (int i = 0; i < MAX_SCHED_RULES; i++) {
     SchedRule &r = sched[i];
     r.days &= 0x7F;
@@ -208,6 +214,7 @@ static void cfgToJson(JsonDocument &d) {
   JsonArray ba = d["btns"].to<JsonArray>();
   for (int i = 0; i < BTN_SLOTS; i++) ba.add(btnActionStr(settings.btnAct[i]));
   d["tempOffset"] = settings.tempOffset;
+  d["histStepMin"] = settings.histStepMin;
   {
     JsonArray sa = d["sched"].to<JsonArray>();
     for (int i = 0; i < MAX_SCHED_RULES; i++) {
@@ -301,8 +308,8 @@ void Settings::load() {
       }
 	  if (d["animPresets"].is<JsonArray>()) {
         JsonArray apa = d["animPresets"].as<JsonArray>();
-        if (apa.size() > 0) animPreset[0] = animPresetFromStr(String(apa[0] | "none"));
-        if (apa.size() > 1) animPreset[1] = animPresetFromStr(String(apa[1] | "none"));
+        if (apa.size() > 0) animPreset[0] = animPresetFromStr(String(apa[0] | "offzone2024"));
+        if (apa.size() > 1) animPreset[1] = animPresetFromStr(String(apa[1] | "offzone2024"));
       }
       if (d["btns"].is<JsonArray>()) {
         JsonArray ba = d["btns"].as<JsonArray>();
@@ -310,6 +317,7 @@ void Settings::load() {
           btnAct[i] = btnActionFromStr(String(ba[i] | ""), btnAct[i]);
       }
       tempOffset = d["tempOffset"] | tempOffset;
+      histStepMin = d["histStepMin"] | histStepMin;
       if (d["sched"].is<JsonArray>()) {
         JsonArray sa = d["sched"].as<JsonArray>();
         for (int i = 0; i < MAX_SCHED_RULES && i < (int)sa.size(); i++) {
