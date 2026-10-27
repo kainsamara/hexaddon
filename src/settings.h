@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.9.4"
+#define FW_VERSION "0.9.5"
 
 // Wi-Fi TX power, dBm (0 = max 11.0). Serial command "TXPWR x" overrides
 // it at runtime for experiments. Lower it when the antenna is mistuned:
@@ -29,17 +29,32 @@ enum class DispMode : uint8_t { Info = 0, Image = 1, Off = 2, Sensors = 3, Anim 
 enum class AnimPreset : uint8_t { Offzone2024 = 0, Offzone2026 = 1, Addon2022 = 2 };
 enum class GpioMode : uint8_t { Input = 0, PullUp = 1, Output = 2 };
 
+// Scheduler rule (Панели → Включение по расписанию), executed by sched.cpp
+// against the synced NTP clock. days bit mask: bit0=Mon .. bit6=Sun.
+struct SchedRule {
+  bool used = false;          // slot occupied (false = free, not sent to UI)
+  bool on = true;             // rule enabled
+  uint8_t days = 0x7F;        // every day
+  uint8_t hour = 19, minute = 0;
+  bool enable = true;         // action: true = turn on, false = turn off
+  uint16_t durationMin = 0;   // >0: turn back off after N minutes
+  uint8_t target = 0;         // 0 = LED backlight (animOn), 1 = addon power
+};
+#define MAX_SCHED_RULES 8
+
 // configurable button gestures: btnAct[0]=single click, [1]=double click,
 // [2]=hold 2s, [3]=hold 8s. GPIO1 = PIN_IO0, GPIO2 = PIN_IO1.
+// Stored in NVS as strings, so renumbering the enum is safe.
 enum BtnAction : uint8_t {
-  BTN_LIGHT = 0,    // toggle backlight
-  BTN_POWER = 1,    // toggle addon power
-  BTN_DISPLAY = 2,  // cycle display mode
-  BTN_GPIO1 = 3,    // toggle GPIO1 (PIN_IO0)
-  BTN_GPIO2 = 4,    // toggle GPIO2 (PIN_IO1)
+  BTN_LIGHT = 0,     // toggle backlight
+  BTN_POWER = 1,     // toggle addon power
+  BTN_DISPLAY0 = 2,  // cycle display mode, 0x3C
+  BTN_GPIO1 = 3,     // toggle GPIO1 (PIN_IO0)
+  BTN_GPIO2 = 4,     // toggle GPIO2 (PIN_IO1)
   BTN_REBOOT = 5,
-  BTN_WIFI = 6,     // forget wifi + restart
-  BTN_ACTIONS = 7
+  BTN_WIFI = 6,      // forget wifi + restart
+  BTN_DISPLAY1 = 7,  // cycle display mode, 0x3D
+  BTN_ACTIONS = 8
 };
 #define BTN_SLOTS 4
 
@@ -80,9 +95,13 @@ struct Settings {
   // Sensor temperature correction, °C (-15..15, step 0.5)
   float tempOffset = 0.0f;
 
-  // Timezone: POSIX TZ string (e.g. "MSK-3"), validated against TZ_LIST
-  // and pushed into libc via setenv("TZ")/tzset() in sanitize()
-  String tz = "MSK-3";
+  // Scheduler (see SchedRule above)
+  SchedRule sched[MAX_SCHED_RULES];
+
+  // Timezone: POSIX TZ string (e.g. "UTC-3" = UTC+3, the sign is inverted
+  // by the POSIX standard), validated against TZ_LIST and pushed into libc
+  // via setenv("TZ")/tzset() in sanitize()
+  String tz = "UTC-3";
 
   // Web UI theme: "dark" (default) | "light" — stored for the page only
   String theme = "dark";
@@ -109,8 +128,12 @@ struct Settings {
 
 extern Settings settings;
 
+// compile date/time as a readable one-liner: "27 Oct 2026 18:32"
+String buildStamp();
+
 const char *gpioModeStr(GpioMode m);
 GpioMode gpioModeFromStr(const String &s);
+String sanitizeHostname(const String &in);  // used by web.cpp (reboot check)
 const char *dispModeStr(DispMode m);
 DispMode dispModeFromStr(const String &s);
 const char *btnActionStr(uint8_t a);

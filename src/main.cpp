@@ -9,6 +9,7 @@
 #include "button.h"
 #include "display.h"
 #include "net.h"
+#include "scheduler.h"
 #include "sensor.h"
 #include "settings.h"
 #include "web.h"
@@ -67,6 +68,7 @@ void setup() {
   // Our own [boot]/[net]/[disp] logs use Serial.printf and stay.
   esp_log_level_set("*", ESP_LOG_NONE);
   Serial.printf("\n=== HEXADDON v%s ===\n", FW_VERSION);
+  Serial.printf("[boot] build: %s\n", buildStamp().c_str());
   Serial.printf("[boot] reset_reason=%d\n", (int)esp_reset_reason());
 
   settings.load();
@@ -103,6 +105,7 @@ void loop() {
   buttonLoop();
   ledsLoop();
   sensorLoop();
+  schedulerLoop();
   animLoop();
   displayLoop();
   // give idle/WiFi a slice even if something above ran long

@@ -21,11 +21,20 @@ struct OtaState {
 
   // download + flash (background task)
   String stage = "idle";    // idle | download | done | error
-  volatile int progress = 0;  // 0..100 while downloading
+  int progress = 0;         // 0..100 while downloading
   String error;             // last error text (stage == "error")
 };
 
-const OtaState &otaState();
+// The state lives behind a mutex: background tasks write it, async_tcp
+// handlers read it — a plain reference would let a reader observe a
+// half-reassigned String (use-after-free). Always take a snapshot copy.
+OtaState otaState();
+
+// Atomic flag, set right before the download task is spawned and cleared at
+// every task exit: /api/update (multipart upload) must refuse a second
+// writer even inside the gap before the task publishes stage="download"
+// (Update.h itself is not thread safe).
+bool otaDownloadActive();
 
 // Kick off a background release check (no-op if one is already running).
 void otaCheckAsync();

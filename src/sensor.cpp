@@ -3,6 +3,7 @@
 #include <Adafruit_BME280.h>
 #include <Adafruit_BMP280.h>
 #include <Wire.h>
+#include <time.h>
 
 #include "settings.h"
 
@@ -15,6 +16,13 @@ static uint32_t lastTry = 0;
 static uint32_t lastRead = 0;
 static float t = NAN, h = NAN, p = NAN;
 static const char *chip = "";
+
+// 24 h history ring (see sensor.h)
+static int16_t hT[HIST_N];  // temp ×10 °C
+static int16_t hH[HIST_N];  // humidity %, -1 = none (BMP280)
+static uint32_t hTs[HIST_N];  // unix time of the sample (0 = clock unsynced)
+static int hHead = 0, hCount = 0;
+static uint32_t hAt = 0;
 
 // chip id register 0xD0: 0x60 = BME280, 0x58 = BMP280
 static uint8_t chipId(uint8_t a) {
@@ -119,6 +127,29 @@ void sensorLoop() {
   t = rawT + settings.tempOffset;
   h = rawH;
   p = rawP * 0.750062f;  // hPa → mmHg
+
+  // one history point per interval, valid readings only
+  if (now - hAt >= HIST_STEP_MIN * 60000UL) {
+    hAt = now;
+    time_t wall = time(nullptr);
+    hTs[hHead] = wall > 1700000000L ? (uint32_t)wall : 0;
+    hT[hHead] = (int16_t)lroundf(t * 10.0f);
+    hH[hHead] = isnan(h) ? -1 : (int16_t)lroundf(h);
+    hHead = (hHead + 1) % HIST_N;
+    if (hCount < HIST_N) hCount++;
+  }
+}
+
+int sensorHistory(int16_t *t, int16_t *h, uint32_t *ts, int maxN) {
+  int n = hCount < maxN ? hCount : maxN;
+  int start = (hHead - n + HIST_N) % HIST_N;
+  for (int i = 0; i < n; i++) {
+    int idx = (start + i) % HIST_N;
+    t[i] = hT[idx];
+    h[i] = hH[idx];
+    ts[i] = hTs[idx];
+  }
+  return n;
 }
 
 bool sensorPresent() { return present; }

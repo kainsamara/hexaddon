@@ -21,8 +21,6 @@
   --pick:#242012
 }
 
-/* ---------- светлая тема (Система -> Параметры) ---------- */
-
 html[data-theme="light"]{
   color-scheme:light;
   --bg:#f3f4f6;
@@ -223,16 +221,48 @@ html,body{
 
 a{color:var(--acc)}
 
+/* header + tabs в одном sticky-контейнере: высота хедера меняется
+   (перенос строки на узких экранах), отдельный position:sticky у nav
+   с фиксированным top заезжал под хедер */
+#topbar{
+  position:sticky;
+  top:0;
+  z-index:5
+}
+
+/* левая группа хедера (лого + заголовок/версия) */
+#hleft{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex:0 0 auto
+}
+
+/* центральный слот: пустой, когда вкладки второй полосой; в широкое
+   окно fitTabs() переносит сюда #tabs целиком в центр хедера */
+#tabSlot{
+  flex:1 1 0;
+  min-width:0;
+  display:flex;
+  justify-content:center
+}
+
+/* вкладки внутри хедера: без собственной полосы и фона */
+#topbar.tabs-inline #tabs{
+  background:none;
+  border-bottom:none;
+  padding:0;
+  overflow:visible;
+  flex:0 0 auto
+}
+
 header{
   display:flex;
   align-items:center;
   gap:12px;
   padding:14px 16px;
   background:linear-gradient(180deg,#151821,#101319);
-  border-bottom:1px solid var(--line);
-  position:sticky;
-  top:0;
-  z-index:5
+  border-bottom:1px solid var(--line)
 }
 
 .hexlogo{
@@ -374,15 +404,12 @@ html[data-theme="light"] #themeToggle #themeIcoSun{display:none}
 nav{
   display:flex;
   gap:4px;
-  padding:8px 12px;
+  padding:3px 3px;
   justify-content:center;
   justify-content:safe center;
   overflow-x:auto;
   border-bottom:1px solid var(--line);
-  background:#11141a;
-  position:sticky;
-  top:67px;
-  z-index:4
+  background:#11141a
 }
 
 nav button{
@@ -735,6 +762,13 @@ input[type=range].hue::-moz-range-thumb{
 
 /* ---------- buttons ---------- */
 
+/* [hidden] обязан побеждать display из любых классов -
+   иначе кнопка "Обновление" в хедере (.btn = inline-block)
+   не скрывается, когда обновлений нет */
+[hidden]{
+  display:none !important
+}
+
 button.btn,
 label.btn{
   display:inline-block;
@@ -772,6 +806,14 @@ button.btn.danger{
 button.btn:disabled{
   opacity:.45;
   cursor:not-allowed
+}
+
+/* дни недели в правилах расписания - компактнее обычных кнопок */
+#schedRules button.day{
+  padding:3px 7px;
+  font-size:12px;
+  line-height:1.2;
+  border-radius:5px
 }
 
 .btns{
@@ -956,6 +998,13 @@ button.btn:disabled{
 
 .stat .v.small{
   font-size:13px
+}
+
+/* дата сборки одной строкой, без переноса */
+#sBuild{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis
 }
 
 /* ---------- wifi ---------- */
@@ -1211,6 +1260,19 @@ tr.pick:hover td{
   color:#ff9a9a
 }
 
+/* светлые темы не перекрашивают #toast: тёмный фон + var(--fg) делали
+   текст нечитаемым */
+html[data-theme="light"] #toast{
+  background:#ffffff;
+  box-shadow:0 4px 16px rgba(16,20,30,.18);
+  color:var(--fg)
+}
+
+html[data-theme="light"] #toast.err{
+  border-color:#e2b4b6;
+  color:#b02a2a
+}
+
 #overlay{
   position:fixed;
   inset:0;
@@ -1261,6 +1323,20 @@ tr.pick:hover td{
   display:flex;
   flex-direction:column;
   gap:10px
+}
+
+/* полноэкранный график датчика (клик по термометру) */
+.modalBox.histBox{
+  width:min(96vw,980px)
+}
+
+#histCv{
+  width:100%;
+  height:min(56vh,520px);
+  display:block;
+  background:var(--card2);
+  border:1px solid var(--line);
+  border-radius:8px
 }
 
 .modalBox h3{
@@ -1356,7 +1432,10 @@ tr.pick:hover td{
 
 <!-- =================== HEADER: =================== -->
 
+<div id="topbar">
+
 <header>
+  <div id="hleft">
   <div class="hexlogo">
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2434.6921 2369.4805" aria-hidden="true">
     <g transform="translate(-337.50414,-344.99875)">
@@ -1364,15 +1443,16 @@ tr.pick:hover td{
       <path fill="currentColor" d="m 827.37423,1947.9133 v -765.422 H 582.43913 337.50414 V 980.15358 777.81592 h 244.93499 244.9351 V 562.16658 346.51724 h 173.05197 173.0519 v 215.64934 215.64934 h 242.2727 242.2727 v 202.33766 202.33772 h -242.2727 -242.2727 v 765.422 765.4221 H 1000.4262 827.37423 Z"/>
     </g>
   </svg>
-</div>
   </div>
   <div>
     <h1>HEXADDON</h1>
     <div style="display:flex;align-items:center;gap:8px">
       <div class="sub" id="hdrSub"> </div>
-      <button class="btn acc" id="hdrUpd" hidden style="padding:0px 7px;font-size:9px">UPDATE</button>
+      <button class="btn acc" id="hdrUpd" hidden style="padding:0px 7px;font-size:9px">UPGRADE</button>
     </div>
   </div>
+  </div>
+  <div id="tabSlot"></div>
   <div id="hdrRight">
     <button id="themeToggle" type="button" aria-label="Сменить тему" title="Сменить тему">
       <svg id="themeIcoMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
@@ -1391,6 +1471,8 @@ tr.pick:hover td{
   <button data-tab="wifi">Сеть</button>
   <button data-tab="system">Система</button>
 </nav>
+
+</div>
 
 <main>
 
@@ -1497,6 +1579,18 @@ tr.pick:hover td{
 
     </div>
 
+    <!-- Включение по расписанию -->
+    <div class="card">
+      <h3>Расписание</h3>
+
+      <div id="schedRules"></div>
+
+      <div class="btns" style="justify-content:center;padding:5px 0 0px">
+        <button class="btn" id="schedAdd" type="button">+ Добавить правило</button>
+      </div>
+
+    </div>
+
      <!-- Количество панелей -->
     <div class="card">
       <h3>Количество панелей</h3>
@@ -1539,6 +1633,7 @@ tr.pick:hover td{
           <span class="hint">мА, 0 - без ограничения</span>
         </span>
 
+        <span class="val" id="ledMaVal">-- мА</span>
         <input
           type="number"
           id="powerMa"
@@ -1548,7 +1643,7 @@ tr.pick:hover td{
           style="width:80px"
         >
       </div>
-      
+
     </div>
     
   </div>
@@ -1699,7 +1794,7 @@ tr.pick:hover td{
       <div class="row" style="margin-top:10px">
         <span class="lab">
           Имя устройства
-          <span class="hint">А также имя в локальной сети (http://&lt;имя&gt;.local)</span>
+          <span class="hint">А также имя в локальной сети (http://<span id="hostHintName">hexaddon</span>.local)</span>
         </span>
 
         <input type="text" id="hostname" style="width:180px">
@@ -1708,7 +1803,7 @@ tr.pick:hover td{
 
 
     <div class="card full">
-      <h3>Подключение к сети</h3>
+      <h3>Новое подключение</h3>
 
       <div class="btns" style="margin-bottom:10px">
         <button class="btn acc" id="btnScan">
@@ -1762,11 +1857,6 @@ tr.pick:hover td{
         </button>
       </div>
 
-      <p class="dimtext" style="margin-bottom:0" id="wifiHint">
-        После подключения устройство перезагрузится.
-        Если DHCP доступен, устройство будет доступно через
-        <span class="mono" id="wifiHintHost">hexaddon.local</span>
-      </p>
     </div>
 
   </div>
@@ -1789,6 +1879,11 @@ tr.pick:hover td{
         <div class="stat">
           <div class="k">Версия</div>
           <div class="v small mono" id="sVer">--</div>
+        </div>
+
+        <div class="stat">
+          <div class="k">Сборка</div>
+          <div class="v small mono" id="sBuild">--</div>
         </div>
 
         <div class="stat">
@@ -1922,6 +2017,17 @@ tr.pick:hover td{
   </div>
 </div>
 
+<div id="histModal" class="modal" hidden>
+  <div class="modalBox histBox">
+    <h3 id="histTitle">Датчик</h3>
+    <div class="stats" id="histNow"></div>
+    <canvas id="histCv"></canvas>
+    <div class="btns">
+      <button class="btn acc" id="histClose" type="button">Закрыть</button>
+    </div>
+  </div>
+</div>
+
 
 <script>
 'use strict';
@@ -2025,7 +2131,7 @@ async function jget(url,ms){
   const t = setTimeout(()=>c.abort(), ms || 8000);
 
   try{
-    const r = await fetch(url,{signal:c.signal});
+    const r = await fetch(url,{signal:c.signal, cache:'no-store'});
 
     if(!r.ok)
       throw new Error('HTTP ' + r.status);
@@ -2144,7 +2250,7 @@ async function runSave(){
     const r = await jpost('/api/config', sent);
 
     for(const k in r){
-      if(k === 'reboot')
+      if(k === 'reboot' || k === 'ok')
         continue;
 
       try{
@@ -2504,6 +2610,44 @@ function wifiFailText(){
 }
 
 
+/* вкладки в центр хедера, если целиком влезают между лого/заголовком и
+   темой/IP справа; иначе — второй полосой под хедером (как раньше) */
+let tabsInline = false;
+
+function fitTabs(){
+  const nav  = $('tabs');
+  const hdr  = document.querySelector('header');
+  const left = $('hleft'), right = $('hdrRight');
+  if(!nav || !hdr || !left || !right) return;
+
+  const btns = nav.querySelectorAll('button');
+  let w = 4 * (btns.length - 1);  // gap между кнопками
+  btns.forEach(b=>{ w += b.offsetWidth; });
+
+  const gap = 12;
+  const free = hdr.clientWidth - left.offsetWidth - right.offsetWidth
+             - 2*gap - 16;  // запас, чтобы не прижиматься вплотную
+
+  const want = w > 0 && w <= free;
+  if(want === tabsInline) return;
+  tabsInline = want;
+
+  const topbar = $('topbar');
+  if(want){
+    $('tabSlot').appendChild(nav);
+    topbar.classList.add('tabs-inline');
+  }else{
+    topbar.classList.remove('tabs-inline');
+    hdr.after(nav);
+  }
+}
+
+window.addEventListener('resize', ()=>setTimeout(fitTabs, 100));
+
+/* первичная раскладка сразу, не дожидаясь /api/status — иначе нав
+   мигает второй полосой и прыгает в хедер после загрузки данных */
+fitTabs();
+
 function renderHeader(){
 
     setHdrSub(
@@ -2656,6 +2800,7 @@ function renderDevices(){
   const modes = liveModes();
 
   const key =
+    (cfg && cfg.addonPower ? 'p1' : 'p0') + '|' +
     pres.map(
       d => d.addr + ':' + (d.hasImage ? 1 : 0)
     ).join(',') +
@@ -2747,6 +2892,11 @@ function buildCards(pres,se,modes){
   const wrap = $('i2cCards');
 
   wrap.innerHTML = '';
+
+  /* питание аддонов выключено - шина обесточена и карточек быть
+     не может; блок скрывается целиком, без "не обнаружены" */
+  if(cfg && !cfg.addonPower)
+    return;
 
   if(!pres.length && !se.present){
 
@@ -3159,7 +3309,7 @@ function sensorCardHtml(se){
   return `
   <div class="card">
 
-    <h3>${ICO_SENS}Датчик${a}</h3>
+    <h3><span data-role="histBtn" title="Подробный график за 24 часа" style="cursor:pointer">${ICO_SENS}</span>Датчик${a}</h3>
 
     ${row('Микросхема', 'seChip', esc(se.chip || '--'))}
 
@@ -3176,6 +3326,274 @@ function sensorCardHtml(se){
 
   </div>`;
 }
+
+
+/* =========================================================
+   sensor history: полноэкранный оверлей по клику на
+   иконку термометра в карточке датчика
+   ========================================================= */
+
+let histTimer = null;
+
+function histNowHtml(s){
+  const stat = (k, v) =>
+    '<div class="stat"><div class="k">' + k + '</div>' +
+    '<div class="v">' + v + '</div></div>';
+
+  if(!s)
+    return '';
+
+  return (
+    stat('Температура', s.temp == null ? '--' : s.temp.toFixed(1) + ' °C') +
+    (s.hum == null ? '' : stat('Влажность', s.hum.toFixed(0) + ' %')) +
+    stat('Давление', s.pres == null ? '--' : s.pres.toFixed(0) + ' mmHg')
+  );
+}
+
+
+/* canvas в 2x для чёткости, рисуем в css-пикселях */
+function histCtx(cv){
+  const w = cv.clientWidth || 600;
+  const h = cv.clientHeight || 300;
+  cv.width = w * 2;
+  cv.height = h * 2;
+  const c = cv.getContext('2d');
+  c.setTransform(2, 0, 0, 2, 0, 0);
+  return [c, w, h];
+}
+
+
+function fmtTs(v){
+  const d = new Date(v * 1000);
+  const p = n => (n < 10 ? '0' : '') + n;
+  return p(d.getDate()) + '.' + p(d.getMonth() + 1) +
+    ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+
+function drawHist(cv, j, synced){
+
+  const [c, W, H] = histCtx(cv);
+  c.clearRect(0, 0, W, H);
+
+  const t = j.t || [], h = j.h || [], ts = j.ts || [];
+  const n = t.length;
+  const PL = 46, PR = 44, PT = 16, PB = 22;  // поля под подписи
+  const iw = W - PL - PR, ih = H - PT - PB;
+
+  c.strokeStyle = 'rgba(128,140,160,.25)';
+  c.lineWidth = 1;
+
+  for(let i=0; i<=4; i++){
+    const y = PT + Math.round(ih * i / 4) + .5;
+    c.beginPath();
+    c.moveTo(PL, y);
+    c.lineTo(W - PR, y);
+    c.stroke();
+  }
+
+  if(n < 2){
+    c.fillStyle = 'rgba(128,140,160,.9)';
+    c.font = '13px sans-serif';
+    c.textAlign = 'center';
+    c.fillText(
+      'пока мало данных — датчику нужно поработать',
+      W / 2, H / 2
+    );
+    return;
+  }
+
+  /* время: по реальным меткам, если синхронизированы,
+     иначе равномерно (отсюда и авто-масштаб по времени) */
+  const span = Math.max(
+    synced
+      ? ts[n - 1] - ts[0]
+      : n * (j.interval || 5) * 60,
+    (j.interval || 5) * 60 * 2
+  );
+
+  const xOf = i =>
+    synced
+      ? PL + (ts[i] - ts[0]) / span * iw
+      : PL + i / (n - 1) * iw;
+
+  /* температура: свои min/max (значения в десятых °C) */
+  let mn = Infinity, mx = -Infinity;
+
+  for(let i=0; i<n; i++){
+    if(t[i] < mn) mn = t[i];
+    if(t[i] > mx) mx = t[i];
+  }
+
+  if(mx - mn < 5){
+    const mid = (mx + mn) / 2;
+    mn = mid - 2.5;
+    mx = mid + 2.5;
+  }
+
+  let hasH = false;
+
+  for(let i=0; i<n; i++)
+    if(h[i] >= 0)
+      hasH = true;
+
+  /* дырка > 2.5 интервалов = датчик был выключен: рвём линию */
+  const gap = i =>
+    i > 0 && synced &&
+    ts[i] - ts[i - 1] > (j.interval || 5) * 60 * 2.5;
+
+  /* влажность: правая шкала 0..100% */
+  if(hasH){
+    c.strokeStyle = '#4a9eff';
+    c.lineWidth = 1.5;
+    c.beginPath();
+    let started = false;
+
+    for(let i=0; i<n; i++){
+      if(h[i] < 0) continue;
+      const x = xOf(i);
+      const y = PT + (1 - h[i] / 100) * ih;
+      if(!started || gap(i)){ c.moveTo(x, y); started = true; }
+      else c.lineTo(x, y);
+    }
+
+    c.stroke();
+
+    c.fillStyle = '#4a9eff';
+    c.font = '11px sans-serif';
+    c.textAlign = 'left';
+    c.fillText('100%', W - PR + 6, PT + 4);
+    c.fillText('0%', W - PR + 6, PT + ih);
+  }
+
+  /* температура: линия + точка на каждом записанном значении */
+  c.strokeStyle = '#f5a623';
+  c.lineWidth = 1.5;
+  c.beginPath();
+
+  for(let i=0; i<n; i++){
+    const x = xOf(i);
+    const y = PT + (1 - (t[i] - mn) / (mx - mn)) * ih;
+    if(i === 0 || gap(i)) c.moveTo(x, y);
+    else c.lineTo(x, y);
+  }
+
+  c.stroke();
+
+  c.fillStyle = '#f5a623';
+
+  for(let i=0; i<n; i++){
+    const x = xOf(i);
+    const y = PT + (1 - (t[i] - mn) / (mx - mn)) * ih;
+    c.beginPath();
+    c.arc(x, y, 1.6, 0, 7);
+    c.fill();
+  }
+
+  /* подписи осей */
+  c.font = '11px sans-serif';
+  c.textAlign = 'right';
+  c.fillText((mx / 10).toFixed(1), PL - 5, PT + 4);
+  c.fillText((mn / 10).toFixed(1), PL - 5, PT + ih);
+
+  c.fillStyle = 'rgba(128,140,160,.9)';
+  c.textAlign = 'left';
+  c.fillText(synced ? fmtTs(ts[0]) : '−', PL, H - 7);
+
+  c.textAlign = 'right';
+  c.fillText(synced ? fmtTs(ts[n - 1]) : 'сейчас', W - PR, H - 7);
+
+  if(!synced){
+    c.textAlign = 'center';
+    c.fillText('время не синхронизировано', W / 2, H - 7);
+  }
+}
+
+
+async function loadHist(){
+
+  const cv = $('histCv');
+
+  if(!cv) return;
+
+  let j = null;
+
+  try{
+    j = await jget('/api/sensor/history', 8000);
+  }catch(e){}
+
+  if(!j || !j.t || !j.t.length){
+    const [c, W, H] = histCtx(cv);
+    c.clearRect(0, 0, W, H);
+    c.fillStyle = 'rgba(128,140,160,.9)';
+    c.font = '13px sans-serif';
+    c.textAlign = 'center';
+    c.fillText(
+      'Данные пока не собраны',
+      W / 2, H / 2
+    );
+    return;
+  }
+
+  const synced =
+    (j.ts || []).some(v => v > 1700000000) &&
+    j.now && j.now > 1700000000;
+
+  drawHist(cv, j, synced);
+}
+
+
+function openHist(){
+
+  if(!st || !st.sensor || !st.sensor.present)
+    return;
+
+  const s = st.sensor;
+
+  $('histTitle').textContent =
+    'Датчик ' + (s.addr || '') +
+    (s.chip ? ' · ' + s.chip : '');
+
+  $('histNow').innerHTML = histNowHtml(s);
+  $('histModal').hidden = false;
+
+  loadHist();
+
+  clearInterval(histTimer);
+
+  histTimer = setInterval(
+    ()=>{
+      if($('histModal').hidden){
+        clearInterval(histTimer);
+        return;
+      }
+
+      if(st && st.sensor)
+        $('histNow').innerHTML = histNowHtml(st.sensor);
+
+      loadHist();
+    },
+    30000
+  );
+}
+
+
+function closeHist(){
+  $('histModal').hidden = true;
+  clearInterval(histTimer);
+}
+
+$('i2cCards').addEventListener('click', e=>{
+  if(e.target.closest('[data-role="histBtn"]'))
+    openHist();
+});
+
+$('histClose').onclick = closeHist;
+
+$('histModal').addEventListener('click', e=>{
+  if(e.target === $('histModal'))
+    closeHist();
+});
 
 
 /* =========================================================
@@ -3293,6 +3711,9 @@ function renderStatus(){
 
   $('sVer').textContent =
     'v' + st.version;
+
+  $('sBuild').textContent =
+    st.build || '';
 
   $('sMac').textContent =
     st.sta.mac;
@@ -3494,6 +3915,8 @@ function renderCfg(){
 
   setVal($('powerMa'), cfg.powerMa);
 
+  renderSched();
+
   setVal($('color'), cfg.color);
   renderHueUi();
 
@@ -3537,14 +3960,14 @@ function renderCfg(){
         '<option value="' + cfg.tz + '">' + cfg.tz + '</option>'
       );
 
-    setVal(tzSel, cfg.tz || 'MSK-3');
+    setVal(tzSel, cfg.tz || 'UTC-3');
   }
 
   /* тема оформления */
   applyTheme();
   setVal($('themeSel'), cfg.theme || 'dark');
 
-  $('wifiHintHost').textContent = cfg.hostname + '.local';
+  $('hostHintName').textContent = cfg.hostname || 'hexaddon';
 
   if(!cfg.btns || cfg.btns.length < 4)
     cfg.btns = BTN_DEFAULTS.slice();
@@ -3769,6 +4192,189 @@ $('powerMa').onchange = e=>{
 
   saveNow(0);
 };
+
+
+/* ---------- включение по расписанию ---------- */
+
+const DAY_LBL = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+
+const DUR_OPTS = [
+  [0,'∞'],[1,'1 м'],[3,'3 м'],[5,'5 м'],
+  [10,'10 м'],[15,'15 м'],[30,'30 м'],[45,'45 м'],
+  [60,'1 ч'],[90,'1.5 ч'],[120,'2 ч'],[180,'3 ч'],
+  [240,'4 ч'],[360,'6 ч'],[480,'8 ч'],[720,'12 ч']
+];
+
+
+function schedRuleHtml(r, ix){
+  let hs = '', ms = '';
+
+  for(let h=0; h<24; h++)
+    hs +=
+      '<option value="' + h + '"' + (r.h===h ? ' selected' : '') + '>' +
+        (h < 10 ? '0' : '') + h +
+      '</option>';
+
+  for(let m=0; m<60; m++)
+    ms +=
+      '<option value="' + m + '"' + (r.m===m ? ' selected' : '') + '>' +
+        (m < 10 ? '0' : '') + m +
+      '</option>';
+
+  let ds = '';
+
+  for(let d=0; d<7; d++){
+    const on = (r.days >> d) & 1;
+    ds +=
+      '<button type="button" class="btn day' + (on ? ' acc' : '') + '"' +
+        ' data-d="' + d + '"' +
+        (on ? '' : ' style="opacity:.5"') + '>' +
+        DAY_LBL[d] +
+      '</button>';
+  }
+
+  return `
+  <div data-ix="${ix}" style="border-bottom:1px dashed #232833;padding:0px 0 5px">
+    <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:center;padding:0px 0 7px">${ds}</div>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <select data-f="h" style="width:55px">${hs}</select>
+      <select data-f="m" style="width:55px">${ms}</select>
+      <select data-f="act" style="width:104px">
+        <option value="1"${r.act ? ' selected' : ''}>Включить</option>
+        <option value="0"${!r.act ? ' selected' : ''}>Отключить</option>
+      </select>
+      <label class="sw"><input type="checkbox" data-f="on"${r.on ? ' checked' : ''}><span></span></label>
+      <select data-f="dur" style="width:60px">
+        ${
+          DUR_OPTS.map(
+            o =>
+              '<option value="' + o[0] + '"' +
+              (r.dur === o[0] ? ' selected' : '') + '>' +
+                o[1] +
+              '</option>'
+          ).join('')
+        }
+      </select>
+      <select data-f="tgt" style="width:110px">
+        <option value="power"${r.tgt === 'power' ? ' selected' : ''}>Питание</option>
+        <option value="light"${r.tgt !== 'power' ? ' selected' : ''}>Подсветка</option>
+      </select>
+      <button type="button" class="btn danger" data-del="1" style="padding:4px 10px">✕</button>
+    </div>
+  </div>`;
+}
+
+
+function renderSched(){
+  if(!cfg) return;
+
+  if(!Array.isArray(cfg.sched))
+    cfg.sched = [];
+
+  $('schedRules').innerHTML =
+    cfg.sched
+      .map((r, ix)=>{
+        if(r.tgt !== 'power' && r.tgt !== 'light')
+          r.tgt = 'light';
+        return schedRuleHtml(r, ix);
+      })
+      .join('');
+
+  $('schedAdd').disabled =
+    cfg.sched.length >= 8;
+}
+
+
+$('schedAdd').onclick = ()=>{
+  if(!cfg) return;
+
+  if(!Array.isArray(cfg.sched))
+    cfg.sched = [];
+
+  if(cfg.sched.length >= 8)
+    return;
+
+  cfg.sched.push(
+    {
+      on: true,
+      days: 127,
+      h: 19,
+      m: 0,
+      act: true,
+      dur: 0,
+      tgt: 'light'
+    }
+  );
+
+  renderSched();
+  saveNow(0);
+};
+
+
+/* делегирование: переживает перерисовку innerHTML */
+$('schedRules').addEventListener('click', e=>{
+
+  if(!cfg || !Array.isArray(cfg.sched))
+    return;
+
+  const del = e.target.closest('[data-del]');
+
+  if(del){
+    const ix = +del.closest('[data-ix]').dataset.ix;
+    cfg.sched.splice(ix, 1);
+    renderSched();
+    saveNow(0);
+    return;
+  }
+
+  const day = e.target.closest('[data-d]');
+
+  if(day){
+    const box = day.closest('[data-ix]');
+    const ix = +box.dataset.ix;
+    const d = +day.dataset.d;
+    cfg.sched[ix].days ^= (1 << d);
+    const on = (cfg.sched[ix].days >> d) & 1;
+    day.classList.toggle('acc', on);
+    day.style.opacity = on ? '' : '.5';
+    saveNow(0);
+  }
+});
+
+
+$('schedRules').addEventListener('change', e=>{
+
+  if(!cfg || !Array.isArray(cfg.sched))
+    return;
+
+  const box = e.target.closest('[data-ix]');
+
+  if(!box)
+    return;
+
+  const ix = +box.dataset.ix;
+  const f = e.target.dataset.f;
+
+  if(!f)
+    return;
+
+  const r = cfg.sched[ix];
+
+  if(f === 'on')
+    r.on = e.target.checked;
+  else if(f === 'h')
+    r.h = +e.target.value;
+  else if(f === 'm')
+    r.m = +e.target.value;
+  else if(f === 'act')
+    r.act = e.target.value === '1';
+  else if(f === 'dur')
+    r.dur = +e.target.value;
+  else if(f === 'tgt')
+    r.tgt = e.target.value;
+
+  saveNow(0);
+});
 
 
 $('color').oninput = e=>{
@@ -5342,7 +5948,8 @@ bindGpio(1);
 const BTN_OPTS = [
   ['light',     'Переключить подсветку'],
   ['power',     'Переключить питание'],
-  ['display',   'Смена режима дисплея'],
+  ['display0',  'Смена режима дисплея 3C'],
+  ['display1',  'Смена режима дисплея 3D'],
   ['reboot',    'Перезагрузка'],
   ['wifireset', 'Сброс Wi-Fi'],
   ['gpio1',     'Переключить GPIO1'],
@@ -5374,18 +5981,19 @@ const BTN_DEFAULTS = ['light','power','reboot','wifireset'];
    ========================================================= */
 
 const TZ_LIST = [
-  ['UTC0',   'UTC'],
-  ['MSK-2',  'Калининград (МСК−1)'],
-  ['MSK-3',  'Москва (МСК)'],
-  ['MSK-4',  'Ульяновск (МСК+1)'],
-  ['MSK-5',  'Екатеринбург (МСК+2)'],
-  ['MSK-6',  'Омск (МСК+3)'],
-  ['MSK-7',  'Красноярск (МСК+4)'],
-  ['MSK-8',  'Иркутск (МСК+5)'],
-  ['MSK-9',  'Чита (МСК+6)'],
-  ['MSK-10', 'Владивосток (МСК+7)'],
-  ['MSK-11', 'Магадан (МСК+8)'],
-  ['MSK-12', 'Камчатка (МСК+9)']
+  ['UTC0',   '(МСК−3) UTC'],
+  ['UTC-1',  '(МСК−2) UTC−1'],
+  ['UTC-2',  '(МСК−1) Калининград'],
+  ['UTC-3',  '(=МСК=) Москва'],
+  ['UTC-4',  '(МСК+1) Ульяновск'],
+  ['UTC-5',  '(МСК+2) Екатеринбург'],
+  ['UTC-6',  '(МСК+3) Омск'],
+  ['UTC-7',  '(МСК+4) Новосибирск'],
+  ['UTC-8',  '(МСК+5) Иркутск'],
+  ['UTC-9',  '(МСК+6) Чита'],
+  ['UTC-10', '(МСК+7) Владивосток'],
+  ['UTC-11', '(МСК+8) Сахалин'],
+  ['UTC-12', '(МСК+9) Камчатка']
 ];
 
 $('tzSel').innerHTML =
@@ -5673,7 +6281,7 @@ $('btnConnect').onclick =
       'Подключение',
       'Устройство сохраняет сеть "' +
       ssid +
-      '" и перезагружается.',
+      '" и подключается.',
       'Эта страница сама откроет http://' +
       host +
       ', когда устройство подключится.',
@@ -5744,9 +6352,9 @@ $('btnConnect').onclick =
             }
 
           }catch(e){
-            /* 192.168.4.1 не отвечает: AP погас при перезагрузке, компьютер
+            /* 192.168.4.1 не отвечает: AP погас после подключения, телефон
                возвращается в домашнюю сеть. Даём устройству время подняться
-               и уходим на mDNS-адрес, который живёт уже в домашней сети */
+               и уходим на mDNS-имя, которое живёт уже в домашней сети */
             dead++;
 
             if(dead >= 2 && Date.now()-t0 >= 20000)
@@ -5828,16 +6436,16 @@ function hostClean(v){
    make the firmware reboot the device mid-edit; save on change (blur/Enter) */
 $('hostname').oninput = e=>{
   const clean = hostClean(e.target.value);
-  $('wifiHintHost').textContent =
-    (clean || 'hexaddon') + '.local';
+  $('hostHintName').textContent =
+    clean || 'hexaddon';
 };
 
 $('hostname').onchange = e=>{
   if(!cfg) return;
   cfg.hostname = hostClean(e.target.value);
   e.target.value = cfg.hostname;
-  $('wifiHintHost').textContent =
-    cfg.hostname + '.local';
+  $('hostHintName').textContent =
+    cfg.hostname;
   clearTimeout(hostTimer);
   saveNow(0);
 };
@@ -6011,12 +6619,11 @@ $('otaFile').onchange = e=>{
     );
   };
 
-  const fd =
-    new FormData();
+  /* raw body, no multipart: the device streams the bytes straight into
+     the inactive OTA slot (see src/web.cpp /api/update) */
+  xhr.setRequestHeader('Content-Type', 'application/octet-stream');
 
-  fd.append('update', f, f.name);
-
-  xhr.send(fd);
+  xhr.send(f);
 };
 
 
@@ -6142,14 +6749,9 @@ $('hdrUpd').onclick = ()=>{
 };
 
 
-/* опрос раз в минуту: сервер кэширует результат проверки на 10 минут,
-   так что в GitHub реально уходим примерно каждым десятым запросом */
-setInterval(
-  ()=>{
-    updCheck();
-  },
-  60000
-);
+/* проверка обновлений - один раз при загрузке страницы (в init()).
+   Сервер кэширует результат на 10 минут: перезагрузка страницы в
+   течение этого времени ответит из кэша, не тратя лимит GitHub */
 
 
 /* =========================================================
@@ -6249,9 +6851,15 @@ async function refreshStatus(){
 
     st = fresh;
 
+    if(typeof st.ledMa === 'number'){
+      const el = $('ledMaVal');
+      if(el) el.textContent = st.ledMa + ' мА';
+    }
+
     renderHeader();
     renderStatus();
     syncCfgFromStatus(t0);
+    fitTabs();  // версия/IP в пилюле изменили ширину правой группы
 
   }finally{
     stBusy = false;
@@ -6303,6 +6911,7 @@ async function init(){
   renderHeader();
   renderStatus();
   renderCfg();
+  fitTabs();  // первичная раскладка вкладок под текущую ширину окна
   updCheck();
 
   (st.displays || [])

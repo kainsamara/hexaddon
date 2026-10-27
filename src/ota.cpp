@@ -5,6 +5,7 @@
 #include <Update.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <atomic>
 
 #include "settings.h"  // FW_VERSION
 
@@ -15,6 +16,28 @@
 #define REBOOT_DELAY_MS 4000UL   // let the UI pick up the final status
 
 static OtaState st;
+
+// st is written by the background check/download tasks and read by async_tcp
+// handlers: String assignment is a free+realloc, so every access pair must
+// be serialized. Critical sections are a few String copies — microseconds.
+static SemaphoreHandle_t stateMutex() {
+  static SemaphoreHandle_t m = xSemaphoreCreateMutex();
+  return m;
+}
+struct StateLock {
+  StateLock() { xSemaphoreTake(stateMutex(), portMAX_DELAY); }
+  ~StateLock() { xSemaphoreGive(stateMutex()); }
+};
+
+// set before the download task exists, cleared at every task exit — closes
+// the "upload starts before the task manages to publish stage" window
+static std::atomic<bool> dlActive{false};
+bool otaDownloadActive() { return dlActive.load(std::memory_order_acquire); }
+
+OtaState otaState() {
+  StateLock lock;
+  return st;  // copy while held: PODs + String refcounts/buffers are stable
+}
 
 // ---------------- version compare ----------------
 
@@ -39,10 +62,13 @@ bool otaNewerThan(const String &latest) {
 // the bootloader's SHA-256 anyway, so a broken download can never boot.
 
 static void checkTask(void *) {
+  // build the payload in locals, publish in one shot at the end — a reader
+  // in the web handler must never observe a half-written String
+  String latest, url;
+  bool ok = false;
   WiFiClientSecure cl;
   cl.setInsecure();
   HTTPClient http;
-  bool ok = false;
   if (http.begin(cl, GH_RELEASE_API)) {
     http.useHTTP10(true);
     http.setTimeout(12000);
@@ -54,7 +80,6 @@ static void checkTask(void *) {
         String tag = d["tag_name"] | "";
         if (tag.length()) {
           if (tag[0] == 'v' || tag[0] == 'V') tag.remove(0, 1);
-          String url;
           for (JsonVariant a : d["assets"].as<JsonArray>()) {
             if (String(a["name"] | "") == "firmware.bin") {
               url = a["browser_download_url"] | "";
@@ -62,9 +87,7 @@ static void checkTask(void *) {
             }
           }
           if (url.length()) {
-            st.latest = tag;
-            st.url = url;
-            st.netError = false;
+            latest = tag;
             ok = true;
           }
         }
@@ -74,33 +97,59 @@ static void checkTask(void *) {
     }
     http.end();
   }
-  if (!ok) st.netError = true;
-  st.checked = true;
-  st.checkedAt = millis();
-  st.checking = false;
+  if (ok) {
+    StateLock lock;
+    st.latest = latest;
+    st.url = url;
+    st.netError = false;
+  } else {
+    StateLock lock;
+    st.netError = true;
+  }
+  {
+    StateLock lock;
+    st.checked = true;
+    st.checkedAt = millis();
+    st.checking = false;
+  }
   vTaskDelete(NULL);
 }
 
 void otaCheckAsync() {
-  if (st.checking) return;
-  st.checking = true;
-  if (xTaskCreate(checkTask, "otaChk", 16384, nullptr, 5, nullptr) != pdPASS)
+  bool already = false;
+  {
+    StateLock lock;
+    already = st.checking;
+    st.checking = true;
+  }
+  if (already) return;
+  if (xTaskCreate(checkTask, "otaChk", 16384, nullptr, 5, nullptr) != pdPASS) {
+    StateLock lock;
     st.checking = false;
+  }
 }
 
 // ---------------- download + flash (background) ----------------
 
 static void otaFail(const char *what) {
-  st.stage = "error";
-  st.error = what;
+  {
+    StateLock lock;
+    st.stage = "error";
+    st.error = what;
+  }
+  dlActive.store(false, std::memory_order_release);
   if (Update.isRunning()) Update.end(false);
   Serial.printf("[ota] %s\n", what);
 }
 
 static void downloadTask(void *) {
-  String url = st.url;
-  st.progress = 0;
-  st.stage = "download";
+  String url;
+  {
+    StateLock lock;
+    url = st.url;
+    st.progress = 0;
+    st.stage = "download";
+  }
 
   WiFiClientSecure cl;
   cl.setInsecure();
@@ -169,28 +218,50 @@ static void downloadTask(void *) {
 
   Serial.printf("[ota] github download ok: %u bytes, rebooting\n",
                 (unsigned)written);
-  st.progress = 100;
-  st.stage = "done";
+  {
+    StateLock lock;
+    st.progress = 100;
+    st.stage = "done";
+  }
   // give the UI a moment to fetch the final status, then swap slots
   uint32_t t0 = millis();
   while (millis() - t0 < REBOOT_DELAY_MS) delay(100);
+  dlActive.store(false, std::memory_order_release);
   ESP.restart();
 }
 
 bool otaStart(String &err) {
-  if (st.stage == "download") {
-    err = "update is already running";
+  // "download" = in flight, "done" = flashed, reboot pending in a few
+  // seconds — both must refuse a second task
+  {
+    StateLock lock;
+    if (st.stage == "download" || st.stage == "done") {
+      err = "update is already running";
+      return false;
+    }
+  }
+  if (otaDownloadActive()) {
+    err = "update is starting";
     return false;
   }
-  if (!st.checked || !st.url.length()) {
-    err = "no update info, run a check first";
+  if (Update.isRunning()) {  // a multipart /api/update upload is in flight
+    err = "firmware upload in progress";
     return false;
   }
+  {
+    StateLock lock;
+    if (!st.checked || !st.url.length()) {
+      err = "no update info, run a check first";
+      return false;
+    }
+  }
+  // reserve Update.h before the task exists: a multipart upload starting in
+  // this gap would write to the same slot from another context
+  dlActive.store(true, std::memory_order_release);
   if (xTaskCreate(downloadTask, "otaDl", 16384, nullptr, 5, nullptr) != pdPASS) {
+    dlActive.store(false, std::memory_order_release);
     err = "cannot start task";
     return false;
   }
   return true;
 }
-
-const OtaState &otaState() { return st; }

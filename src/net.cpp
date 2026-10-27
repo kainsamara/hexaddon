@@ -16,6 +16,12 @@ static uint8_t failCount = 0;    // consecutive rejected STA attempts
 static uint32_t retryAt = 0;     // deadline of a periodic STA retry from the portal
 static String apSsid;
 
+// after STA connects with the portal still up, keep the AP alive this long:
+// the phone hangs on it and polls /api/status, so the page learns the new
+// STA IP and can follow the device (Android cannot resolve <host>.local)
+#define PORTAL_GRACE_MS 6000
+static uint32_t portalGraceAt = 0;
+
 // the core knows exactly why STA dropped: NO_AP_FOUND (wrong SSID / 5 GHz
 // only network), 4WAY_HANDSHAKE_TIMEOUT (wrong password), BEACON_TIMEOUT
 // (weak signal). Keep the last reason for /api/status (the portal shows it)
@@ -83,6 +89,11 @@ static void stopPortal() {
 void netBegin() {
   WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
+  // modem sleep adds 100-300ms latency spikes and drops packets with
+  // power-saving clients (phones!) — Chrome then retries a request until
+  // it gives up with ERR_TOO_MANY_RETRIES. A mains-powered device has no
+  // reason to sleep the radio.
+  WiFi.setSleep(false);
   netSetTxPower(WIFI_TX_POWER_DBM);
   WiFi.onEvent(onStaDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   // NTP clock (for the Clock display mode): syncs whenever STA is up.
@@ -125,37 +136,70 @@ void netLoop() {
         }
       }
     }
-    if (portal && settings.wifiConfigured) stopPortal();
-  } else if (settings.wifiConfigured) {
-    if (!portal) {
-      bool timeout = (connecting && millis() - tConnect > 20000) ||
-                     (!connecting && lastConn && millis() - lastConn > 20000);
-      // 10 rejected attempts or 20s of silence -> full portal (AP only,
-      // STA off): the beacon is rock stable, phones always see it
-      if (failCount >= 10 || timeout) startPortal();
-    } else if (retryAt) {
-      // a periodic STA retry is in flight; give it 15s, then drop STA again
-      if ((int32_t)(millis() - retryAt) >= 0) {
-        retryAt = 0;
-        WiFi.disconnect(false);
-        WiFi.mode(WIFI_AP);
-        Serial.println(F("[net] portal: STA retry failed, back to AP only"));
-        tConnect = millis();
+    if (portal && settings.wifiConfigured) {
+      // grace window: the setup page (still on our AP) polls /api/status and
+      // grabs sta.ip — its follow-up link must be the IP, not <host>.local
+      // (Android has no mDNS resolver and would lose the device)
+      if (!portalGraceAt) {
+        portalGraceAt = millis() + PORTAL_GRACE_MS;
+        Serial.printf("[net] portal: STA up, closing AP in %us\n",
+                      (unsigned)(PORTAL_GRACE_MS / 1000));
+      } else if ((int32_t)(millis() - portalGraceAt) >= 0) {
+        portalGraceAt = 0;
+        stopPortal();
       }
-    } else if (millis() - tConnect > 120000) {
-      // once every 2 minutes: a short STA attempt in case the router just
-      // rebooted — the device recovers on its own instead of sitting in
-      // the portal forever (the AP blinks for these 15s, that's the price)
-      Serial.println(F("[net] portal: periodic STA retry"));
-      WiFi.mode(WIFI_AP_STA);
-      WiFi.begin(settings.wifiSsid.c_str(), settings.wifiPass.c_str());
-      retryAt = millis() + 15000;
+    }
+  } else {
+    portalGraceAt = 0;  // STA dropped mid-grace: keep the portal, retry below
+    if (settings.wifiConfigured) {
+      if (!portal) {
+        bool timeout = (connecting && millis() - tConnect > 20000) ||
+                       (!connecting && lastConn && millis() - lastConn > 20000);
+        // 10 rejected attempts or 20s of silence -> full portal (AP only,
+        // STA off): the beacon is rock stable, phones always see it
+        if (failCount >= 10 || timeout) startPortal();
+      } else if (retryAt) {
+        // a short STA attempt (right after saving Wi-Fi / the periodic retry)
+        // is in flight; give it 15s, then drop STA again
+        if ((int32_t)(millis() - retryAt) >= 0) {
+          retryAt = 0;
+          WiFi.disconnect(false);
+          WiFi.mode(WIFI_AP);
+          Serial.println(F("[net] portal: STA retry failed, back to AP only"));
+          tConnect = millis();
+        }
+      } else if (millis() - tConnect > 120000) {
+        // once every 2 minutes: a short STA attempt in case the router just
+        // rebooted — the device recovers on its own instead of sitting in
+        // the portal forever (the AP blinks for these 15s, that's the price)
+        Serial.println(F("[net] portal: periodic STA retry"));
+        WiFi.mode(WIFI_AP_STA);
+        WiFi.begin(settings.wifiSsid.c_str(), settings.wifiPass.c_str());
+        retryAt = millis() + 15000;
+      }
     }
   }
 }
 
 bool netIsPortal() {
   return portal;
+}
+
+// /api/wifi from the portal: connect to the saved network WITHOUT a reboot.
+// The AP stays up (netLoop drops it PORTAL_GRACE_MS after STA connects), so
+// the phone keeps the page open, learns the new IP and follows the device —
+// with a reboot it would strand on the dead 192.168.4.1 origin and have to
+// guess <host>.local, which Android cannot resolve at all.
+void netPortalTrySta() {
+  if (!portal) return;
+  WiFi.setAutoReconnect(true);
+  WiFi.setHostname(settings.hostname.c_str());
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.begin(settings.wifiSsid.c_str(), settings.wifiPass.c_str());
+  connecting = true;
+  tConnect = millis();
+  retryAt = millis() + 15000;  // wrong password etc: back to AP-only
+  Serial.printf("[net] portal: trying STA \"%s\"\n", settings.wifiSsid.c_str());
 }
 
 // map a dBm value onto the discrete wifi_power_t steps (0 = max/19.5)

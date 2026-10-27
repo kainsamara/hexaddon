@@ -8,10 +8,13 @@ Settings settings;
 
 static const char *ORDER_LIST[] = {"GRB", "RGB", "BRG", "BGR", "RBG", "GBR"};
 
-// valid values for settings.tz (POSIX TZ strings, fixed offsets - no DST in RU)
+// valid values for settings.tz (POSIX TZ strings; the sign is inverted by
+// the standard: "UTC-3" means UTC+3). Must stay in sync with TZ_LIST in
+// data/index.html: sanitize() resets anything else to UTC-3 (= Moscow).
 static const char *TZ_LIST[] = {
-    "UTC0",    "MSK-2",  "MSK-3",  "MSK-4",  "MSK-5",  "MSK-6",
-    "MSK-7",   "MSK-8",  "MSK-9",  "MSK-10", "MSK-11", "MSK-12",
+    "UTC0",
+    "UTC-1", "UTC-2", "UTC-3", "UTC-4", "UTC-5", "UTC-6",
+    "UTC-7", "UTC-8", "UTC-9", "UTC-10", "UTC-11", "UTC-12",
 };
 
 const char *gpioModeStr(GpioMode m) {
@@ -51,7 +54,8 @@ DispMode dispModeFromStr(const String &s) {
 const char *btnActionStr(uint8_t a) {
   switch (a) {
     case BTN_POWER: return "power";
-    case BTN_DISPLAY: return "display";
+    case BTN_DISPLAY0: return "display0";
+    case BTN_DISPLAY1: return "display1";
     case BTN_GPIO1: return "gpio1";
     case BTN_GPIO2: return "gpio2";
     case BTN_REBOOT: return "reboot";
@@ -63,7 +67,9 @@ const char *btnActionStr(uint8_t a) {
 uint8_t btnActionFromStr(const String &s, uint8_t def) {
   if (s == "light") return BTN_LIGHT;
   if (s == "power") return BTN_POWER;
-  if (s == "display") return BTN_DISPLAY;
+  // legacy "display" cycled both displays; map it to the 0x3C action
+  if (s == "display" || s == "display0") return BTN_DISPLAY0;
+  if (s == "display1") return BTN_DISPLAY1;
   if (s == "gpio1") return BTN_GPIO1;
   if (s == "gpio2") return BTN_GPIO2;
   if (s == "reboot") return BTN_REBOOT;
@@ -75,6 +81,32 @@ String Settings::colorHex() const {
   char buf[8];
   snprintf(buf, sizeof(buf), "#%02X%02X%02X", colR, colG, colB);
   return String(buf);
+}
+
+// Shared with web.cpp: the "did the hostname change -> reboot" decision is
+// computed in the HTTP handler (async_tcp) and must match sanitize() exactly
+String sanitizeHostname(const String &in) {
+  String s = in;
+  s.trim();
+  s.toLowerCase();
+  String clean;
+  for (size_t i = 0; i < s.length(); i++) {
+    char c = s[i];
+    if (isalnum((unsigned char)c) || c == '-') clean += c;
+  }
+  if (clean.length() > 32) clean = clean.substring(0, 32);
+  if (clean.length() == 0) clean = "hexaddon";
+  return clean;
+}
+
+// __DATE__ is "Mmm dd yyyy" (the day is space-padded), __TIME__ "hh:mm:ss" -
+// rearrange into "27 Oct 2026 18:32"
+String buildStamp() {
+  String d = __DATE__, t = __TIME__;
+  String day = d.substring(4, 6);
+  day.trim();
+  return day + ' ' + d.substring(0, 3) + ' ' + d.substring(7, 11) + ' ' +
+         t.substring(0, 5);
 }
 
 void Settings::setColorHex(const String &hex) {
@@ -97,6 +129,16 @@ void Settings::sanitize() {
   if (tempOffset > 15.0f) tempOffset = 15.0f;
   tempOffset = roundf(tempOffset * 2.0f) / 2.0f;
 
+  for (int i = 0; i < MAX_SCHED_RULES; i++) {
+    SchedRule &r = sched[i];
+    r.days &= 0x7F;
+    if (r.days == 0) r.days = 0x7F;
+    if (r.hour > 23) r.hour = 23;
+    if (r.minute > 59) r.minute = 59;
+    if (r.durationMin > 1440) r.durationMin = 1440;
+    if (r.target > 1) r.target = 0;
+  }
+
   bool knownOrder = false;
   for (const char *o : ORDER_LIST) {
     if (order == o) { knownOrder = true; break; }
@@ -111,22 +153,20 @@ void Settings::sanitize() {
   for (int i = 0; i < BTN_SLOTS; i++)
     if (btnAct[i] >= BTN_ACTIONS) btnAct[i] = BTN_DEF[i];
 
-  hostname.trim();
-  hostname.toLowerCase();
-  String clean;
-  for (size_t i = 0; i < hostname.length(); i++) {
-    char c = hostname[i];
-    if (isalnum((unsigned char)c) || c == '-') clean += c;
-  }
-  if (clean.length() > 32) clean = clean.substring(0, 32);
-  if (clean.length() == 0) clean = "hexaddon";
-  hostname = clean;
+  hostname = sanitizeHostname(hostname);
 
   bool tzOk = false;
   for (const char *z : TZ_LIST) {
     if (tz == z) { tzOk = true; break; }
   }
-  if (!tzOk) tz = "MSK-3";
+  // legacy saved values used the "MSK-x" spelling — remap, don't reset
+  if (!tzOk && tz.startsWith("MSK-")) {
+    String remap = "UTC-" + tz.substring(4);
+    for (const char *z : TZ_LIST) {
+      if (remap == z) { tz = remap; tzOk = true; break; }
+    }
+  }
+  if (!tzOk) tz = "UTC-3";
   // apply right away: load() and applyConfig() both run sanitize()
   setenv("TZ", tz.c_str(), 1);
   tzset();
@@ -168,6 +208,21 @@ static void cfgToJson(JsonDocument &d) {
   JsonArray ba = d["btns"].to<JsonArray>();
   for (int i = 0; i < BTN_SLOTS; i++) ba.add(btnActionStr(settings.btnAct[i]));
   d["tempOffset"] = settings.tempOffset;
+  {
+    JsonArray sa = d["sched"].to<JsonArray>();
+    for (int i = 0; i < MAX_SCHED_RULES; i++) {
+      const SchedRule &r = settings.sched[i];
+      if (!r.used) continue;
+      JsonObject o = sa.add<JsonObject>();
+      o["on"] = r.on;
+      o["days"] = r.days;
+      o["h"] = r.hour;
+      o["m"] = r.minute;
+      o["act"] = r.enable;
+      o["dur"] = r.durationMin;
+      o["tgt"] = r.target ? "power" : "light";
+    }
+  }
   d["hostname"] = settings.hostname;
   d["tz"] = settings.tz;
   d["theme"] = settings.theme;
@@ -255,6 +310,22 @@ void Settings::load() {
           btnAct[i] = btnActionFromStr(String(ba[i] | ""), btnAct[i]);
       }
       tempOffset = d["tempOffset"] | tempOffset;
+      if (d["sched"].is<JsonArray>()) {
+        JsonArray sa = d["sched"].as<JsonArray>();
+        for (int i = 0; i < MAX_SCHED_RULES && i < (int)sa.size(); i++) {
+          JsonObjectConst o = sa[i];
+          if (o.isNull()) continue;
+          SchedRule &r = sched[i];
+          r.used = true;
+          r.on = o["on"] | r.on;
+          r.days = (uint8_t)(o["days"] | r.days);
+          r.hour = (uint8_t)(o["h"] | r.hour);
+          r.minute = (uint8_t)(o["m"] | r.minute);
+          r.enable = o["act"] | r.enable;
+          r.durationMin = (uint16_t)(o["dur"] | r.durationMin);
+          r.target = String(o["tgt"] | "light") == "power" ? 1 : 0;
+        }
+      }
       if (d["hostname"].is<const char *>()) hostname = d["hostname"].as<String>();
       if (d["tz"].is<const char *>()) tz = d["tz"].as<String>();
       if (d["theme"].is<const char *>()) theme = d["theme"].as<String>();

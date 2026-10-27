@@ -16,20 +16,20 @@
 #define BTN_HOLD8_MS    8000
 #define BTN_DBL_MS      350  // max pause between the two clicks
 
-static void displayCycle() {
+static void displayCycle(int idx) {
   // same order as the UI list, sensors is skipped when no sensor is connected
   static const DispMode ORDER[6] = {DispMode::Info, DispMode::Image,
                                     DispMode::Anim, DispMode::Sensors,
                                     DispMode::Clock, DispMode::Off};
   int cur = 0;
   for (int i = 0; i < 6; i++)
-    if (settings.displayMode[0] == ORDER[i]) cur = i;
+    if (settings.displayMode[idx] == ORDER[i]) cur = i;
   DispMode next;
   do {
     cur = (cur + 1) % 6;
     next = ORDER[cur];
   } while (next == DispMode::Sensors && !sensorPresent());
-  settings.displayMode[0] = settings.displayMode[1] = next;
+  settings.displayMode[idx] = next;
   settings.save();
   const char *nm = next == DispMode::Info      ? "Info"
                    : next == DispMode::Image   ? "Image"
@@ -37,7 +37,7 @@ static void displayCycle() {
                    : next == DispMode::Sensors ? "Sensors"
                    : next == DispMode::Clock   ? "Clock"
                                                : "Off";
-  displayToast(String("Mode: ") + nm);
+  displayToast(String(idx ? "3D" : "3C") + " mode: " + nm);
 }
 
 static void gpioToggle(int which) {
@@ -58,8 +58,12 @@ static void runAction(uint8_t a) {
       displayToast(settings.addonPower ? "Power: ON" : "Power: OFF");
       break;
 
-    case BTN_DISPLAY:
-      displayCycle();
+    case BTN_DISPLAY0:
+      displayCycle(0);
+      break;
+
+    case BTN_DISPLAY1:
+      displayCycle(1);
       break;
 
     case BTN_GPIO1:

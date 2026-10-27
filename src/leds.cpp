@@ -571,6 +571,11 @@ static void portalFx(int n, uint32_t t) {
   }
 }
 
+// last measured strip current (after the power cap), for /api/status
+static uint32_t lastMa = 0;
+
+uint32_t ledsCurrentMa() { return lastMa; }
+
 void ledsLoop() {
   static uint32_t last = 0;
   uint32_t now = millis();
@@ -640,7 +645,9 @@ void ledsLoop() {
   if (mA > limit) {
     uint8_t mul = (uint8_t)((uint64_t)limit * 255 / mA);
     for (int i = 0; i < n; i++) tmp[i] = scaleCol(tmp[i], mul);
+    mA = limit;  // what we actually draw after the cap
   }
+  lastMa = mA;
   for (int i = 0; i < MAX_LEDS; i++) {
     if (i < n) strip.setPixelColor(i, tmp[i].r, tmp[i].g, tmp[i].b);
     else strip.setPixelColor(i, 0, 0, 0);
