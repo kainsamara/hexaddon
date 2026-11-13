@@ -716,7 +716,7 @@ input:disabled{
   align-items:center
 }
 
-#passEye{
+#passEye,.pwEye{
   position:absolute;
   right:3px;
   display:inline-flex;
@@ -731,19 +731,19 @@ input:disabled{
   cursor:pointer
 }
 
-#passEye:hover{color:var(--fg)}
+#passEye:hover,.pwEye:hover{color:var(--fg)}
 
-#passEye svg{
+#passEye svg,.pwEye svg{
   width:16px;
   height:16px;
   display:none
 }
 
 /* скрытый пароль: обычный глаз, видимый: перечёркнутый */
-#passEye .icoEye{display:block}
+#passEye .icoEye,.pwEye .icoEye{display:block}
 
-#passEye.shown .icoEyeOff{display:block}
-#passEye.shown .icoEye{display:none}
+#passEye.shown .icoEyeOff,.pwEye.shown .icoEyeOff{display:block}
+#passEye.shown .icoEye,.pwEye.shown .icoEye{display:none}
 
 /* радужный ползунок оттенка */
 input[type=range].hue{
@@ -1927,7 +1927,7 @@ html[data-theme="light"] #toast.err{
           <span class="hint">А также имя в локальной сети (http://<span id="hostHintName">hexaddon</span>.local)</span>
         </span>
 
-        <input type="text" id="hostname" style="width:180px">
+        <input type="text" id="hostname" style="width:200px">
       </div>
     </div>
 
@@ -1985,6 +1985,54 @@ html[data-theme="light"] #toast.err{
         <button class="btn" id="btnForget">
           Забыть сеть
         </button>
+      </div>
+
+    </div>
+
+    <div class="card full">
+      <h3>Интеграции</h3>
+
+      <div class="row" id="mqttHead">
+        <span class="lab">MQTT
+          <span class="hint">Home Assistant, Алиса</span>
+        </span>
+        <label class="sw">
+          <input type="checkbox" id="mqttEnable">
+          <span></span>
+        </label>
+      </div>
+
+      <div id="mqttBody">
+      <div class="row">
+        <span class="lab">Сервер</span>
+        <input type="text" id="mqttHost" maxlength="63" style="width:200px" placeholder="192.168.1.*">
+      </div>
+
+      <div class="row">
+        <span class="lab">Порт</span>
+        <input type="number" id="mqttPort" min="1" max="65535" style="width:200px">
+      </div>
+
+      <div class="row">
+        <span class="lab">Логин</span>
+        <input type="text" id="mqttUser" maxlength="32" style="width:200px" autocomplete="off">
+      </div>
+
+      <div class="row">
+        <span class="lab">Пароль</span>
+        <span class="pwWrap">
+        <input type="password" id="mqttPass" maxlength="64" style="width:200px;padding-right:34px" autocomplete="new-password">
+        <button id="mqttEye" class="pwEye" type="button" aria-label="Показать пароль" title="Показать пароль">
+          <svg class="icoEye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <svg class="icoEyeOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+        </button>
+        </span>
+      </div>
+
+      <div class="row">
+        <span class="lab">Состояние</span>
+        <span class="v small" id="mqttState">--</span>
+      </div>
       </div>
 
     </div>
@@ -4084,6 +4132,9 @@ function renderStatus(){
   setText('sIp',     st.sta.connected ? st.sta.ip : 'нет');
   setText('sRssi',   st.sta.connected ? rssiText(st.sta.rssi) : '-');
   setText('sHost',   cfg.hostname + '.local');
+  setText('mqttState',
+    st.mqtt === 'online' ? 'подключено' :
+    (st.mqtt === 'off' ? 'выключено' : 'нет связи'));
 
   $('sUp').textContent =
     fmtUptime(st.uptime);
@@ -4348,6 +4399,14 @@ function renderCfg(){
   /* тема оформления */
   applyTheme();
   setVal($('themeSel'), cfg.theme || 'dark');
+
+  /* MQTT (Интеграции) */
+  $('mqttEnable').checked = !!cfg.mqttEnable;
+  mqttToggleBody(!!cfg.mqttEnable);
+  setVal($('mqttHost'), cfg.mqttHost || '');
+  setVal($('mqttPort'), cfg.mqttPort || 1883);
+  setVal($('mqttUser'), cfg.mqttUser || '');
+  setVal($('mqttPass'), cfg.mqttPass || '');
 
   $('hostHintName').textContent = cfg.hostname || 'hexaddon';
 
@@ -6464,6 +6523,59 @@ $('addonPower').onchange = e=>{
 };
 
 
+/* =========================================================
+   MQTT (Интеграции)
+   ========================================================= */
+
+/* свёрнутый MQTT: прячем поля и пунктир под единственной строкой */
+function mqttToggleBody(on){
+  $('mqttBody').style.display = on ? '' : 'none';
+  $('mqttHead').style.borderBottom =
+    on ? '' : 'none';
+}
+
+$('mqttEnable').onchange = e=>{
+  if(!cfg) return;
+  cfg.mqttEnable = e.target.checked;
+  mqttToggleBody(cfg.mqttEnable);
+  saveNow(0);
+};
+
+$('mqttHost').onchange = e=>{
+  if(!cfg) return;
+  cfg.mqttHost = e.target.value.trim();
+  e.target.value = cfg.mqttHost;
+  saveNow(0);
+};
+
+$('mqttPort').onchange = e=>{
+  if(!cfg) return;
+  cfg.mqttPort =
+    Math.max(
+      1,
+      Math.min(
+        65535,
+        parseInt(e.target.value) || 1883
+      )
+    );
+  e.target.value = cfg.mqttPort;
+  saveNow(0);
+};
+
+$('mqttUser').onchange = e=>{
+  if(!cfg) return;
+  cfg.mqttUser = e.target.value.trim();
+  e.target.value = cfg.mqttUser;
+  saveNow(0);
+};
+
+$('mqttPass').onchange = e=>{
+  if(!cfg) return;
+  cfg.mqttPass = e.target.value;
+  saveNow(0);
+};
+
+
 function bindGpio(n){
 
   $('g'+n+'mode').onchange =
@@ -6772,6 +6884,20 @@ $('passEye').onclick = ()=>{
   inp.type = show ? 'text' : 'password';
 
   const eye = $('passEye');
+
+  eye.classList.toggle('shown', show);
+  eye.title = eye.ariaLabel =
+    show ? 'Скрыть пароль' : 'Показать пароль';
+};
+
+/* глазик в MQTT-пароле (Интеграции) */
+$('mqttEye').onclick = ()=>{
+  const inp = $('mqttPass');
+  const show = (inp.type === 'password');
+
+  inp.type = show ? 'text' : 'password';
+
+  const eye = $('mqttEye');
 
   eye.classList.toggle('shown', show);
   eye.title = eye.ariaLabel =

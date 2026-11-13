@@ -161,6 +161,15 @@ void Settings::sanitize() {
 
   hostname = sanitizeHostname(hostname);
 
+  // MQTT: no host + enabled would just burn reconnect attempts into the void
+  mqttHost.trim();
+  if (mqttHost.length() > 63) mqttHost = mqttHost.substring(0, 63);
+  if (mqttPort == 0) mqttPort = 1883;
+  mqttUser.trim();
+  if (mqttUser.length() > 32) mqttUser = mqttUser.substring(0, 32);
+  if (mqttPass.length() > 64) mqttPass = mqttPass.substring(0, 64);
+  if (mqttEnable && mqttHost.length() == 0) mqttEnable = false;
+
   bool tzOk = false;
   for (const char *z : TZ_LIST) {
     if (tz == z) { tzOk = true; break; }
@@ -233,6 +242,11 @@ static void cfgToJson(JsonDocument &d) {
   d["hostname"] = settings.hostname;
   d["tz"] = settings.tz;
   d["theme"] = settings.theme;
+  d["mqttEnable"] = settings.mqttEnable;
+  d["mqttHost"] = settings.mqttHost;
+  d["mqttPort"] = settings.mqttPort;
+  d["mqttUser"] = settings.mqttUser;
+  d["mqttPass"] = settings.mqttPass;
 }
 
 void Settings::save() {
@@ -337,6 +351,11 @@ void Settings::load() {
       if (d["hostname"].is<const char *>()) hostname = d["hostname"].as<String>();
       if (d["tz"].is<const char *>()) tz = d["tz"].as<String>();
       if (d["theme"].is<const char *>()) theme = d["theme"].as<String>();
+      mqttEnable = d["mqttEnable"] | mqttEnable;
+      if (d["mqttHost"].is<const char *>()) mqttHost = d["mqttHost"].as<String>();
+      mqttPort = d["mqttPort"] | mqttPort;
+      if (d["mqttUser"].is<const char *>()) mqttUser = d["mqttUser"].as<String>();
+      if (d["mqttPass"].is<const char *>()) mqttPass = d["mqttPass"].as<String>();
     }
   }
   sanitize();

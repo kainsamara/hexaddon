@@ -9,6 +9,7 @@
 #include "button.h"
 #include "display.h"
 #include "net.h"
+#include "mqtt.h"
 #include "scheduler.h"
 #include "sensor.h"
 #include "settings.h"
@@ -90,6 +91,7 @@ void setup() {
   Serial.println("[boot] anim ok");
   sensorInit();
   netBegin();
+  mqttBegin();
   webBegin();
   buttonBegin();
   Serial.println("[boot] ready");
@@ -102,6 +104,7 @@ void setup() {
 void loop() {
   serialCmd();
   netLoop();
+  mqttLoop();
   webLoop();
   buttonLoop();
   ledsLoop();

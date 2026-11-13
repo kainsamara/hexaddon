@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.9.5"
+#define FW_VERSION "0.10.0"
 
 // Wi-Fi TX power, dBm (0 = max 11.0). Serial command "TXPWR x" overrides
 // it at runtime for experiments. Lower it when the antenna is mistuned:
@@ -116,6 +116,14 @@ struct Settings {
   String wifiSsid;
   String wifiPass;
   bool wifiConfigured = false;
+
+  // MQTT (Home Assistant / Alice). Host is a LAN address; TLS is not used —
+  // the broker lives at home. Topic base = hostname (see mqtt.cpp).
+  bool mqttEnable = false;
+  String mqttHost;
+  uint16_t mqttPort = 1883;
+  String mqttUser = "hexaddon";
+  String mqttPass;
 
   int ledCount() const { return panels * PANEL_LEDS; }
 

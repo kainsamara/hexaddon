@@ -9,6 +9,7 @@
 
 #include "leds.h"
 #include "display.h"
+#include "mqtt.h"
 #include "net.h"
 #include "ota.h"
 #include "sensor.h"
@@ -298,6 +299,7 @@ static void fillStatus(JsonDocument &d) {
   }
   d["addonPower"] = settings.addonPower;
   d["ledMa"] = ledsCurrentMa();  // live strip draw, for the Панели tab
+  d["mqtt"] = mqttStateStr();    // online | offline | off
 
   uint8_t plist[DISP_NUM];
   int pn = displayPresentList(plist, DISP_NUM);
@@ -384,6 +386,11 @@ static void fillConfig(JsonDocument &d) {
   d["hostname"] = settings.hostname;
   d["tz"] = settings.tz;
   d["theme"] = settings.theme;
+  d["mqttEnable"] = settings.mqttEnable;
+  d["mqttHost"] = settings.mqttHost;
+  d["mqttPort"] = settings.mqttPort;
+  d["mqttUser"] = settings.mqttUser;
+  d["mqttPass"] = settings.mqttPass;
 }
 
 static String docStr(JsonDocument &d) {
@@ -509,6 +516,31 @@ static bool applyConfig(JsonDocument &d) {
   if (d["tz"].is<const char *>()) s.tz = d["tz"].as<String>();  // sanitized below
   if (d["theme"].is<const char *>()) s.theme = d["theme"].as<String>();
 
+  bool mqttChanged = false;
+  if (d["mqttEnable"].is<bool>()) {
+    mqttChanged |= (s.mqttEnable != d["mqttEnable"].as<bool>());
+    s.mqttEnable = d["mqttEnable"].as<bool>();
+  }
+  if (d["mqttHost"].is<const char *>()) {
+    mqttChanged |= (s.mqttHost != d["mqttHost"].as<String>());
+    s.mqttHost = d["mqttHost"].as<String>();
+  }
+  if (d["mqttPort"].is<int>()) {
+    int port = constrain((int)d["mqttPort"], 1, 65535);
+    mqttChanged |= (port != (int)s.mqttPort);
+    s.mqttPort = (uint16_t)port;
+  }
+  if (d["mqttUser"].is<const char *>()) {
+    mqttChanged |= (s.mqttUser != d["mqttUser"].as<String>());
+    s.mqttUser = d["mqttUser"].as<String>();
+  }
+  if (d["mqttPass"].is<const char *>()) {
+    mqttChanged |= (s.mqttPass != d["mqttPass"].as<String>());
+    s.mqttPass = d["mqttPass"].as<String>();
+  }
+  // sanitize() above may still flip mqttEnable (empty host) — compare against
+  // the pre-sanitize state via the captured flags, they only say "touched"
+
   if (d["hostname"].is<const char *>()) {
     String old = s.hostname;
     s.hostname = d["hostname"].as<String>();
@@ -519,6 +551,7 @@ static bool applyConfig(JsonDocument &d) {
   s.sanitize();
   s.save();
   applyEffects |= EFF_PINS | EFF_LEDS;  // cheap, idempotent
+  if (mqttChanged) mqttRestart();  // reconnect with the new broker config
   return reboot;
 }
 
