@@ -25,9 +25,10 @@ struct OtaState {
   String error;             // last error text (stage == "error")
 };
 
-// The state lives behind a mutex: background tasks write it, async_tcp
-// handlers read it — a plain reference would let a reader observe a
-// half-reassigned String (use-after-free). Always take a snapshot copy.
+// The state lives behind a mutex: background tasks write it, web handlers
+// read it from the loop context — a plain reference would let a reader
+// observe a half-reassigned String (use-after-free). Always take a
+// snapshot copy.
 OtaState otaState();
 
 // Atomic flag, set right before the download task is spawned and cleared at

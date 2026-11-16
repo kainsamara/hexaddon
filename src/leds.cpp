@@ -496,11 +496,13 @@ static Col rndEffColor(int anim, uint8_t sp, int n, uint32_t t) {
   static uint8_t hueFrom = 0, hueTo = 0;
   static uint32_t t0 = 0, iter = 0;
   static bool inited = false;
-  static int lastAnim = -1, lastN = -1;
-  if (!inited || anim != lastAnim || n != lastN) {
+  // deliberately NOT named lastAnim/lastN: those exist at file scope and
+  // a local shadow here made this function a puzzle to read
+  static int stAnim = -1, stN = -1;
+  if (!inited || anim != stAnim || n != stN) {
     inited = true;
-    lastAnim = anim;
-    lastN = n;
+    stAnim = anim;
+    stN = n;
     hueFrom = rnd8();
     hueTo = rnd8();
     t0 = t;

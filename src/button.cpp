@@ -5,15 +5,18 @@
 #include "sensor.h"
 
 // configurable gestures (settings.btnAct[]):
-//   single click / double click / hold 2s / hold 8s
+//   single click / double click / hold 2s / hold 10s
 // Hold actions fire on RELEASE, by the threshold reached: firing the 2s
 // slot right at the 2s mark would (with the default "reboot" there) restart
-// the board before the 8s action can ever run, and keep restarting in a
+// the board before the 10s action can ever run, and keep restarting in a
 // loop while the button stays pressed.
+// The long slot is 10s (was 8s): a pocket/cat/kid pressing the button for
+// 8s must not factory-reset the Wi-Fi — 10s is still an easy deliberate
+// panic hold.
 
 #define BTN_DEBOUNCE_MS 25
-#define BTN_HOLD2_MS    2000
-#define BTN_HOLD8_MS    8000
+#define BTN_HOLD_SHORT_MS 2000
+#define BTN_HOLD_LONG_MS  10000
 #define BTN_DBL_MS      350  // max pause between the two clicks
 
 static void displayCycle(int idx) {
@@ -41,6 +44,9 @@ static void displayCycle(int idx) {
 }
 
 static void gpioToggle(int which) {
+  // Forced switch to Output mode: the gesture is a quick manual toggle, so
+  // the pin must actively drive the level. An input pin with an external
+  // signal would fight us anyway — the UI shows the new mode afterwards.
   GpioCfg &g = which ? settings.gpio1 : settings.gpio0;
   g.mode = GpioMode::Output;
   g.value = g.value ? 0 : 1;
@@ -76,16 +82,19 @@ static void runAction(uint8_t a) {
 
     case BTN_REBOOT:
       displayToast("Reboot...");
+      displayLoop();  // draw the toast NOW: the restart below fires before
+                      // the main loop's own displayLoop() pass would run
       sensorHistFlush();  // keep the chart across this reboot
-      delay(300);
+      delay(600);         // let the user actually read the toast
       ESP.restart();
       break;
 
     case BTN_WIFI:
       displayToast("Wi-Fi reset...");
+      displayLoop();  // same: the toast must be visible before we die
       settings.clearWifi();
-      sensorHistFlush();  // keep the chart across this reboot
-      delay(400);
+      sensorHistFlush();
+      delay(700);
       ESP.restart();
       break;
 
@@ -137,12 +146,12 @@ void buttonLoop() {
 
     // hold gestures: which slot fires is decided by how long the button
     // was held IN TOTAL, when it's released (see the comment on top)
-    if (held >= BTN_HOLD8_MS) {
+    if (held >= BTN_HOLD_LONG_MS) {
       pendingClickAt = 0;  // this was a hold, not a click
       runAction(settings.btnAct[3]);
       return;
     }
-    if (held >= BTN_HOLD2_MS) {
+    if (held >= BTN_HOLD_SHORT_MS) {
       pendingClickAt = 0;
       runAction(settings.btnAct[2]);
       return;

@@ -16,6 +16,20 @@ struct SchedTimer {
 };
 static SchedTimer timers[MAX_SCHED_RULES];
 
+// Rules are re-packed from slot 0 on every /api/config save, while a
+// duration timer lives up to 24 h: a timer indexed by slot would then fire
+// for a DIFFERENT rule than the one that armed it. Track a cheap hash of
+// the rule set and disarm all one-shot timers on any edit — they re-arm
+// the next time their rule fires.
+static uint32_t schedHash() {
+  uint32_t h = 2166136261u;
+  const uint8_t *p = (const uint8_t *)settings.sched;
+  for (size_t i = 0; i < sizeof(settings.sched); i++) {
+    h = (h ^ p[i]) * 16777619u;
+  }
+  return h;
+}
+
 static void applyAction(uint8_t target, bool on, const char *why) {
   if (target == 1) {
     if (settings.addonPower == on) return;
@@ -45,6 +59,14 @@ void schedulerLoop() {
       timers[i].active = false;
       applyAction(timers[i].target, timers[i].turnOn, "timer");
     }
+  }
+
+  // any edit of the rule set disarms the one-shot timers (see schedHash)
+  static uint32_t lastHash = 0;
+  uint32_t h = schedHash();
+  if (h != lastHash) {
+    lastHash = h;
+    for (int i = 0; i < MAX_SCHED_RULES; i++) timers[i].active = false;
   }
 
   // fire each rule once per matching minute; tm_wday: 0=Sun..6=Sat

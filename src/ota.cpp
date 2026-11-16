@@ -205,7 +205,12 @@ static void downloadTask(void *) {
       return;
     }
     written += n;
-    if (total > 0) st.progress = (int)(written * 100 / (uint32_t)total);
+    if (total > 0) {
+      // same discipline as every other st access: the web handler reads
+      // this under StateLock from the loop context
+      StateLock lock;
+      st.progress = (int)(written * 100 / (uint32_t)total);
+    }
   }
   http.end();
 

@@ -1,7 +1,7 @@
 #include "anim.h"
 #include "sprites.h"
 #include "settings.h"
-#include "display.h"  
+#include "display.h"
 #include <Preferences.h>
 #include <cstring>
 #include <math.h>

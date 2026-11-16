@@ -97,7 +97,7 @@ static const char *statusText(int code) {
     case 413: return "Payload Too Large";
     case 431: return "Request Header Fields Too Large";
     case 500: return "Internal Server Error";
-    default: return "OK";
+    default: return "Unknown";  // never lie with "OK" on an unmapped code
   }
 }
 
@@ -300,6 +300,7 @@ static void fillStatus(JsonDocument &d) {
   d["addonPower"] = settings.addonPower;
   d["ledMa"] = ledsCurrentMa();  // live strip draw, for the Панели tab
   d["mqtt"] = mqttStateStr();    // online | offline | off
+  d["mdnsSelf"] = netMdnsSelfOk();  // false = ".local dead, IP alive" state
 
   uint8_t plist[DISP_NUM];
   int pn = displayPresentList(plist, DISP_NUM);
@@ -359,11 +360,11 @@ static void fillConfig(JsonDocument &d) {
   dr.add(settings.driver[0]);
   dr.add(settings.driver[1]);
   JsonArray fa = d["flips"].to<JsonArray>();
+  fa.add(settings.flip[0]);
+  fa.add(settings.flip[1]);
   JsonArray apa = d["animPresets"].to<JsonArray>();
   apa.add(animPresetStr(settings.animPreset[0]));
   apa.add(animPresetStr(settings.animPreset[1]));
-  fa.add(settings.flip[0]);
-  fa.add(settings.flip[1]);
   JsonArray ba = d["btns"].to<JsonArray>();
   for (int i = 0; i < BTN_SLOTS; i++) ba.add(btnActionStr(settings.btnAct[i]));
   d["tempOffset"] = settings.tempOffset;
@@ -390,7 +391,9 @@ static void fillConfig(JsonDocument &d) {
   d["mqttHost"] = settings.mqttHost;
   d["mqttPort"] = settings.mqttPort;
   d["mqttUser"] = settings.mqttUser;
-  d["mqttPass"] = settings.mqttPass;
+  // mqttPass is DELIBERATELY not returned: the GET goes to anyone on the
+  // LAN unauthenticated. applyConfig treats an empty/absent password as
+  // "keep the stored one" (see there), so the UI never needs it back.
 }
 
 static String docStr(JsonDocument &d) {
@@ -535,8 +538,14 @@ static bool applyConfig(JsonDocument &d) {
     s.mqttUser = d["mqttUser"].as<String>();
   }
   if (d["mqttPass"].is<const char *>()) {
-    mqttChanged |= (s.mqttPass != d["mqttPass"].as<String>());
-    s.mqttPass = d["mqttPass"].as<String>();
+    // "empty = keep the stored one" contract: GET /api/config does not
+    // return the password, so an untouched (blank) UI field must not wipe
+    // it. To drop the password, disable MQTT or factory-reset.
+    String mp = d["mqttPass"].as<String>();
+    if (mp.length()) {
+      mqttChanged |= (s.mqttPass != mp);
+      s.mqttPass = mp;
+    }
   }
   // sanitize() above may still flip mqttEnable (empty host) — compare against
   // the pre-sanitize state via the captured flags, they only say "touched"
@@ -580,6 +589,18 @@ static void handleConfigPost(HttpSlot &s) {
   if (reboot) scheduleRestart();
 }
 
+// Reveal the stored MQTT broker password — ONLY on this explicit POST.
+// GET /api/config never carries it, so the password does not ride every
+// page load (DOM/JS-heap/browser extensions/cache surface). The POST shape
+// keeps it out of caches, prefetch and automated scanners; within the
+// deliberate no-auth LAN model it is not a secret from an ACTIVE attacker
+// (who owns /api/factory anyway) — this closes the PASSIVE leak only.
+static void handleMqttPass(HttpSlot &s) {
+  JsonDocument d;
+  d["pass"] = settings.mqttPass;
+  sendJson(s, 200, docStr(d));
+}
+
 // ---------------- wifi ----------------
 
 // Async scan: the first request starts it, polling requests collect the
@@ -590,9 +611,21 @@ static uint32_t scanAt = 0;  // when the scan was kicked off
 
 #define SCAN_STALE_MS 30000UL  // result uncollected this long = garbage
 
+bool webScanRecent() {
+  // true while a /api/networks scan is recent enough that the radio may
+  // still be hopping channels. The core's SCANNING bit times out after
+  // max_ms_per_chan*20 while the driver keeps scanning — net.cpp's mDNS
+  // watchdog needs a source of truth that does not lie.
+  return scanStarted && millis() - scanAt < SCAN_STALE_MS;
+}
+
 static void handleNetworks(HttpSlot &s) {
   if (!scanStarted) {
-    WiFi.scanNetworks(true);
+    // show_hidden=true: hidden APs surface as records with an empty SSID,
+    // otherwise the driver drops them and the "Скрытая сеть" row never
+    // appears no matter what the handler does with them.
+    // 120 ms/channel keeps an idle-radio scan at ~2 s.
+    WiFi.scanNetworks(true, true, false, 120);
     scanStarted = true;
     scanAt = millis();
     sendJson(s, 202, "{\"scanning\":true}");
@@ -609,7 +642,23 @@ static void handleNetworks(HttpSlot &s) {
     sendJson(s, 202, "{\"scanning\":true}");
     return;
   }
-  if (st < 0) {  // failed / not reported: restart on the next request
+  if (st < 0) {
+    // The core declares a scan failed after max_ms_per_chan*20 (a mere
+    // 2.4 s at our 120 ms/channel) and clears its SCANNING bit — but a
+    // scan running on a CONNECTED STA routinely takes 10-20+ s (the
+    // driver keeps popping back to the home channel to serve our own
+    // traffic) and keeps running in the driver regardless of the core's
+    // status bits. This was the "won't scan from the web while
+    // connected" bug: the core's premature FAILED made us drop the scan
+    // on every poll and restart it into ESP_ERR_WIFI_STATE forever.
+    // Trust OUR deadline (SCAN_STALE_MS) instead: keep answering
+    // "scanning" — the DONE event still arrives and the result is
+    // collected normally below.
+    if (!stale) {
+      sendJson(s, 202, "{\"scanning\":true}");
+      return;
+    }
+    WiFi.scanDelete();
     scanStarted = false;
     sendJson(s, 202, "{\"scanning\":true}");
     return;
@@ -628,17 +677,22 @@ static void handleNetworks(HttpSlot &s) {
     String ssid;
     int32_t rssi;
     bool sec;
+    bool hidden;
   };
   Net list[24];
   int cnt = 0;
   for (int i = 0; i < n && cnt < 24; i++) {
     String s = WiFi.SSID(i);
-    if (!s.length()) continue;
+    // hidden APs show up in scan results with an empty SSID — keep them
+    // (flagged), otherwise the user thinks the radio is blind
+    bool hidden = !s.length();
     bool sec = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
     int32_t rssi = WiFi.RSSI(i);
     bool dup = false;
     for (int j = 0; j < cnt; j++) {
-      if (list[j].ssid == s) {
+      // all hidden APs collapse into ONE row: they are indistinguishable
+      // in the list anyway (the name is typed by hand)
+      if (list[j].hidden == hidden && (hidden || list[j].ssid == s)) {
         if (rssi > list[j].rssi) {
           list[j].rssi = rssi;
           list[j].sec = sec;
@@ -651,6 +705,7 @@ static void handleNetworks(HttpSlot &s) {
       list[cnt].ssid = s;
       list[cnt].rssi = rssi;
       list[cnt].sec = sec;
+      list[cnt].hidden = hidden;
       cnt++;
     }
   }
@@ -673,6 +728,7 @@ static void handleNetworks(HttpSlot &s) {
     o["ssid"] = list[i].ssid;
     o["rssi"] = list[i].rssi;
     o["secure"] = list[i].sec;
+    o["hidden"] = list[i].hidden;
   }
   sendJson(s, 200, docStr(d));
 }
@@ -689,7 +745,10 @@ static void handleWifiPost(HttpSlot &s) {
     sendErr(s, 400, "empty ssid");
     return;
   }
-  if (ssid.length() > 32 || pass.length() > 64) {
+  if (ssid.length() > 32 || pass.length() > 63) {
+    // 63, not 64: a WPA-PSK passphrase is 8..63 chars by spec — the 64th
+    // would be silently rejected by the AP, and the user would hunt a
+    // "wrong password" that was actually a truncated one
     sendErr(s, 400, "ssid/pass too long");
     return;
   }
@@ -796,10 +855,7 @@ static void handleSensorHistory(HttpSlot &s) {
 }
 
 static void handleFactory(HttpSlot &s) {
-  settings.factoryReset();
-  // RAM still holds the old config — a settings.save() in the 800ms
-  // restart window (button action, /api/config) would write it back
-  settings = Settings();
+  settings.factoryReset();  // wipes NVS AND the RAM copy (see impl)
   sensorHistClear();  // same for the history ring (flush runs pre-restart)
   LittleFS.remove("/img_3c.xbm");  // legacy images (pre-NVS firmware)
   LittleFS.remove("/img_3d.xbm");
@@ -994,6 +1050,7 @@ static void dispatch(HttpSlot &s) {
   if (get && p == "/api/sensor/history") return (void)handleSensorHistory(s);
   if (get && p == "/api/config") return (void)handleConfigGet(s);
   if (post && p == "/api/config") return (void)handleConfigPost(s);
+  if (post && p == "/api/mqtt-pass") return (void)handleMqttPass(s);
   if (get && p == "/api/networks") return (void)handleNetworks(s);
   if (post && p == "/api/wifi") return (void)handleWifiPost(s);
   if (post && p == "/api/wifi/forget") return (void)handleWifiForget(s);
@@ -1168,6 +1225,19 @@ void webLoop() {
       WiFiClient extra = http.accept();
       extra.stop();
     }
+  }
+
+  // heartbeat, synced with the [net] one: how many connection slots are
+  // busy. "slots=6/6" while the page is dead = clients leaking sockets;
+  // "slots=0/6" = the packets do not even reach us (WiFi/lwip level)
+  static uint32_t hbAt = 0;
+  if ((int32_t)(millis() - hbAt) >= 0) {
+    hbAt = millis() + 30000;
+    int used = 0;
+    for (int i = 0; i < HTTP_MAX_CLIENTS; i++)
+      if (slot[i].cli) used++;
+    Serial.printf("[web] hb slots=%d/%d scan=%d\n", used, HTTP_MAX_CLIENTS,
+                  (int)WiFi.scanComplete());
   }
 
   for (int i = 0; i < HTTP_MAX_CLIENTS; i++) serviceSlot(slot[i]);

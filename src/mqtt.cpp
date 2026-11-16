@@ -166,19 +166,26 @@ static void onMessage(const espMqttClientTypes::MessageProperties &,
 static uint32_t retryDelayMs = 5000;
 static uint32_t lastAttemptMs = 0;
 static bool wantRestart = false;  // broker settings changed over HTTP
+static uint32_t discPumpUntil = 0;  // client.loop() deadline of the DISCONNECT flush
 
-// espMqttClient keeps raw pointers to every string passed to its setters,
-// so the client id must live in a stable buffer, not a temporary String
+// espMqttClient keeps raw pointers to every string passed to its setters
+// (setWill stores the topic pointer as-is, it is only READ when connect()
+// builds the CONNECT packet), so the client id AND the will topic must
+// live in stable buffers, not temporary Strings: tAvail() returns String
+// by value and its heap buffer is freed long before connect() runs —
+// a use-after-free that corrupts the LWT topic at random.
 // (settings.* fields are stable: mutated only by applyConfig/load on the
 // same thread, and re-fed to the setters right before every connect()).
 static String clientIdBuf;
+static String willTopicBuf;
 
 static void applyBrokerConfig() {
   clientIdBuf = settings.hostname + "-light";
+  willTopicBuf = tAvail();
   client.setServer(settings.mqttHost.c_str(), settings.mqttPort);
   client.setClientId(clientIdBuf.c_str());
   client.setCredentials(settings.mqttUser.c_str(), settings.mqttPass.c_str());
-  client.setWill(tAvail().c_str(), 1, true, "offline");
+  client.setWill(willTopicBuf.c_str(), 1, true, "offline");
 }
 
 static void onConnect(uint8_t) {
@@ -223,11 +230,38 @@ void mqttLoop() {
   // portal / disabled / OTA flash in progress: keep hands off the radio.
   // Update.h is not thread safe and the OTA task owns the flash meanwhile.
   if (!settings.mqttEnable || netIsPortal() || Update.isRunning()) {
-    if (client.connected()) client.disconnect();
+    if (client.connected()) {
+      // espMqttClient builds the DISCONNECT packet in disconnect() but only
+      // SENDS queued packets from inside client.loop() — requesting one and
+      // walking away leaves it unsent, the TCP lingering and the broker
+      // learning of our death from its keepalive timer instead (LWT fires
+      // late). Pump the engine for a short grace window so the packet
+      // leaves and the socket closes cleanly.
+      if (!discPumpUntil) {
+        client.disconnect();
+        snapValid = false;
+        uint32_t d = millis() + 1000;
+        discPumpUntil = d ? d : 1;  // 0 means "idle" (sensor.cpp deadline style)
+      }
+      if ((int32_t)(millis() - discPumpUntil) < 0) {
+        client.loop();  // the DISCONNECT flushes from here
+        return;
+      }
+    } else {
+      discPumpUntil = 0;  // socket gone: re-arm for the next shutdown
+    }
     snapValid = false;
     return;
   }
-  if (WiFi.status() != WL_CONNECTED) return;
+  discPumpUntil = 0;  // normal operation: nothing pending
+  if (WiFi.status() != WL_CONNECTED) {
+    // no radio, but still pump the client's engine: espMqttClient only
+    // notices a dead TCP socket from inside loop(), and without it the
+    // disconnect callbacks (and a clean reconnect later) stall until the
+    // radio returns on its own
+    client.loop();
+    return;
+  }
 
   if (wantRestart) {
     wantRestart = false;

@@ -34,7 +34,7 @@ GpioMode gpioModeFromStr(const String &s) {
 const char *dispModeStr(DispMode m) {
   switch (m) {
     case DispMode::Image: return "image";
-	case DispMode::Anim: return "anim";
+    case DispMode::Anim: return "anim";
     case DispMode::Off: return "off";
     case DispMode::Sensors: return "sensors";
     case DispMode::Clock: return "clock";
@@ -84,7 +84,8 @@ String Settings::colorHex() const {
 }
 
 // Shared with web.cpp: the "did the hostname change -> reboot" decision is
-// computed in the HTTP handler (async_tcp) and must match sanitize() exactly
+// computed in the HTTP handler (webLoop, the same loop context as here)
+// and must match sanitize() exactly
 String sanitizeHostname(const String &in) {
   String s = in;
   s.trim();
@@ -154,7 +155,7 @@ void Settings::sanitize() {
   if (driver[0] != "sh1106") driver[0] = "ssd1306";
   if (driver[1] != "sh1106") driver[1] = "ssd1306";
 
-  static const uint8_t BTN_DEF[BTN_SLOTS] = {BTN_LIGHT, BTN_POWER, BTN_REBOOT,
+  static const uint8_t BTN_DEF[BTN_SLOTS] = {BTN_POWER, BTN_LIGHT, BTN_REBOOT,
                                              BTN_WIFI};
   for (int i = 0; i < BTN_SLOTS; i++)
     if (btnAct[i] >= BTN_ACTIONS) btnAct[i] = BTN_DEF[i];
@@ -320,7 +321,7 @@ void Settings::load() {
         if (fa.size() > 0) flip[0] = fa[0] | false;
         if (fa.size() > 1) flip[1] = fa[1] | false;
       }
-	  if (d["animPresets"].is<JsonArray>()) {
+      if (d["animPresets"].is<JsonArray>()) {
         JsonArray apa = d["animPresets"].as<JsonArray>();
         if (apa.size() > 0) animPreset[0] = animPresetFromStr(String(apa[0] | "offzone2024"));
         if (apa.size() > 1) animPreset[1] = animPresetFromStr(String(apa[1] | "offzone2024"));
@@ -395,6 +396,17 @@ void Settings::factoryReset() {
   p.begin("hexaddon", false);
   p.clear();
   p.end();
+  // wipe the RAM copy HERE, not in the caller: a stray settings.save() in
+  // the restart window (button action, /api/config) would otherwise write
+  // the OLD config back into the just-cleared NVS. Seeding the dedup
+  // afterwards makes even that stray save a no-op.
+  *this = Settings();
+  sanitize();
+  {
+    JsonDocument d;
+    cfgToJson(d);
+    serializeJson(d, lastCfgJson);
+  }
 }
 
 static void applyGpio(uint8_t pin, const GpioCfg &g) {

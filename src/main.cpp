@@ -43,10 +43,21 @@ static void serialCmd() {
       // dies at 19.5 dBm, the PA is fine and the antenna is mistuned
       float p = buf.substring(6).toFloat();
       if (p > 0 || buf.substring(6) == "-1") {
-        netSetTxPower(p);
-        Serial.printf("[cmd] tx power set, reconnecting\n");
-        WiFi.disconnect();
-        WiFi.reconnect();
+        // manual=true: SWR diagnostics must sweep the full power range,
+        // INCLUDING above the board ceiling — the override is loud in the
+        // log and lives until reboot (see the TX ceiling block in net.cpp)
+        netSetTxPower(p, true);
+        Serial.printf("[cmd] tx power set\n");
+        if (netIsPortal()) {
+          // no STA to reconnect: in AP mode the power applies to the
+          // beacon/data of the portal itself. A reconnect() here would
+          // pointlessly bounce the AP interface.
+          Serial.println(F("[cmd] portal active: power applied, STA reconnect skipped"));
+        } else {
+          Serial.println(F("[cmd] reconnecting to apply"));
+          WiFi.disconnect();
+          WiFi.reconnect();
+        }
       } else {
         Serial.println(F("[cmd] usage: TXPWR 19.5|19|18.5|17|15|13|11|8.5|7|5|2|-1"));
       }

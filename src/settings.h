@@ -2,11 +2,12 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "0.10.0"
+#define FW_VERSION "0.10.3"
 
-// Wi-Fi TX power, dBm (0 = max 11.0). Serial command "TXPWR x" overrides
-// it at runtime for experiments. Lower it when the antenna is mistuned:
-// a strong PA into a bad SWR deafens the receiver's own handshake.
+// Wi-Fi TX power, dBm (0 = auto/max 19.5). Serial command "TXPWR x"
+// overrides it at runtime for experiments. Lower it when the antenna is
+// mistuned: a strong PA into a bad SWR deafens the receiver's own
+// handshake.
 #define WIFI_TX_POWER_DBM 11.0f
 
 // ---------------- Pins ----------------
@@ -43,7 +44,7 @@ struct SchedRule {
 #define MAX_SCHED_RULES 8
 
 // configurable button gestures: btnAct[0]=single click, [1]=double click,
-// [2]=hold 2s, [3]=hold 8s. GPIO1 = PIN_IO0, GPIO2 = PIN_IO1.
+// [2]=hold 2s, [3]=hold 10s. GPIO1 = PIN_IO0, GPIO2 = PIN_IO1.
 // Stored in NVS as strings, so renumbering the enum is safe.
 enum BtnAction : uint8_t {
   BTN_LIGHT = 0,     // toggle backlight
@@ -67,7 +68,7 @@ struct Settings {
   // LEDs
   uint8_t panels = 1;          // 1..MAX_PANELS
   bool reverse = false;        // reverse chain order
-  uint8_t brightness = 120;    // 0..255
+  uint8_t brightness = 128;    // 0..255 (default 50%)
   uint8_t speed = 60;          // 0..100
   uint8_t anim = 0;            // 0..NUM_ANIMS-1
   bool animOn = true;
@@ -87,10 +88,10 @@ struct Settings {
   String driver[2] = {"ssd1306", "ssd1306"};  // ssd1306 | sh1106
   // ANIM presets per display (index 0 = 0x3C, 1 = 0x3D)
   AnimPreset animPreset[2] = {AnimPreset::Offzone2024, AnimPreset::Offzone2024};
-  bool flip[2] = {false, false};  // rotate 180: [0]=0x3C, [1]=0x3D
+  bool flip[2] = {true, false};  // rotate 180: [0]=0x3C, [1]=0x3D (0x3C is mounted upside down by default)
 
   // Button gestures: single / double / hold 2s / hold 8s
-  uint8_t btnAct[BTN_SLOTS] = {BTN_LIGHT, BTN_POWER, BTN_REBOOT, BTN_WIFI};
+  uint8_t btnAct[BTN_SLOTS] = {BTN_POWER, BTN_LIGHT, BTN_REBOOT, BTN_WIFI};
 
   // Sensor temperature correction, °C (-15..15, step 0.5)
   float tempOffset = 0.0f;

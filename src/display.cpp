@@ -477,7 +477,7 @@ static void render(Disp &d, bool toastActive) {
     drawClock(*d.g);
   } else {
     drawInfo(*d.g);
-  }	
+  }
   if (toastActive && toastMsg[0]) {
     d.g->fillRect(0, 52, 128, 12, 1);
     String t = fitStr(String(toastMsg), 20);

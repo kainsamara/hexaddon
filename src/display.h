@@ -13,7 +13,7 @@ void displayToast(const String &msg);
 void displayLoadImage(uint8_t addr);   // reload image of one display from NVS
 void displayReinit();                  // recreate drivers after settings.driver change
 void displayApplyFlip();               // apply 180 rotation from settings.flip[]
-void displayScan();                    // probe I2C now (hotplug0x3C/0x3D into list)
+void displayScan();                    // probe I2C now (hotplug): a plugged 0x3C/0x3D shows up immediately
 bool displayHasImage(uint8_t addr);
 bool displayPresent(uint8_t addr);
 int displayPresentList(uint8_t *out, int maxN);  // filled with present 7-bit addresses

@@ -1955,7 +1955,7 @@ html[data-theme="light"] #toast.err{
           id="wifiSsid"
           maxlength="32"
           style="width:200px"
-          placeholder="выберите из списка"
+          placeholder="имя сети (SSID)"
         >
       </div>
 
@@ -1966,7 +1966,7 @@ html[data-theme="light"] #toast.err{
         <input
           type="password"
           id="wifiPass"
-          maxlength="64"
+          maxlength="63"
           style="width:200px;padding-right:34px"
           placeholder="пароль"
         >
@@ -2021,7 +2021,7 @@ html[data-theme="light"] #toast.err{
       <div class="row">
         <span class="lab">Пароль</span>
         <span class="pwWrap">
-        <input type="password" id="mqttPass" maxlength="64" style="width:200px;padding-right:34px" autocomplete="new-password">
+        <input type="password" id="mqttPass" maxlength="64" style="width:200px;padding-right:34px" placeholder="························" autocomplete="new-password">
         <button id="mqttEye" class="pwEye" type="button" aria-label="Показать пароль" title="Показать пароль">
           <svg class="icoEye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           <svg class="icoEyeOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
@@ -2114,7 +2114,7 @@ html[data-theme="light"] #toast.err{
       </div>
 
       <div class="row">
-        <span class="lab">Удержание 8 сек</span>
+        <span class="lab">Удержание 10 сек</span>
         <select id="btnAct3" style="width:200px"></select>
       </div>
 
@@ -6851,14 +6851,34 @@ function renderNetworks(list){
     tr.querySelector(
       '.ssid'
     ).textContent =
-      n.ssid;
+      n.hidden
+        ? 'Скрытая сеть'
+        : n.ssid;
 
     tr.onclick = ()=>{
 
-      $('wifiSsid').value =
-        n.ssid;
+      if(n.hidden){
 
-      $('wifiPass').focus();
+        /* у скрытой сети нет имени в эфире - его вводят руками */
+
+        $('wifiSsid').value =
+          '';
+
+        $('wifiSsid').focus();
+
+        toast(
+          'Скрытая сеть: введите её имя (SSID) вручную',
+          true
+        );
+
+      } else {
+
+        $('wifiSsid').value =
+          n.ssid;
+
+        $('wifiPass').focus();
+
+      }
 
       document
         .querySelectorAll(
@@ -6890,18 +6910,38 @@ $('passEye').onclick = ()=>{
     show ? 'Скрыть пароль' : 'Показать пароль';
 };
 
-/* глазик в MQTT-пароле (Интеграции) */
-$('mqttEye').onclick = ()=>{
+/* глазик в MQTT-пароле (Интеграции). Пароль НЕ приезжает с /api/config
+   (утекал бы в DOM при каждой загрузке страницы) — пустое поле и первый
+   клик запрашивают его у устройства явно: POST /api/mqtt-pass. После
+   этого поле содержит актуальный пароль; сохранение ушлёт его же
+   значение — сервер увидит «не изменилось» и не рестартит MQTT */
+$('mqttEye').onclick = async ()=>{
+
   const inp = $('mqttPass');
+  const eye = $('mqttEye');
   const show = (inp.type === 'password');
+
+  if(show && !inp.value){
+
+    /* поле пустое: это не «юзер печатает», это «пароль ещё не
+       загружали» — попросим у устройства */
+    try{
+      const r = await jpost('/api/mqtt-pass', {});
+      inp.value = (r && r.pass) || '';
+    }catch(e){
+      toast('Ошибка: ' + e.message, true);
+      return;
+    }
+
+    if(!inp.value)
+      toast('Пароль на устройстве не задан');
+  }
 
   inp.type = show ? 'text' : 'password';
 
-  const eye = $('mqttEye');
-
   eye.classList.toggle('shown', show);
   eye.title = eye.ariaLabel =
-    show ? 'Скрыть пароль' : 'Показать пароль';
+    show ? 'Скрыть пароль' : 'Показать пароль (запросит у устройства)';
 };
 
 $('wifiPass').onkeydown = e=>{
@@ -6931,6 +6971,10 @@ $('btnConnect').onclick =
       return;
     }
 
+    /* портал или обычный UI: дальше разные сценарии */
+    const inPortal =
+      st && st.portal;
+
     try{
 
       await jpost(
@@ -6951,6 +6995,23 @@ $('btnConnect').onclick =
       return;
     }
 
+    /* смена сети из обычного UI: устройство просто перезагружается
+       в новую сеть. Автопереход бессмысленен (телефон может остаться
+       в старой сети), поэтому честное сообщение и всё */
+    if(!inPortal){
+
+      overlayMsg(
+        'Сохранено',
+        'Устройство перезагружается в сеть "' + ssid + '".',
+        'Открой страницу заново по ' +
+          ((cfg.hostname || 'hexaddon') + '.local') +
+          ' или по новому IP устройства.',
+        false
+      );
+
+      return;
+    }
+
     const host =
       (cfg.hostname || 'hexaddon') + '.local';
 
@@ -6959,9 +7020,7 @@ $('btnConnect').onclick =
       'Устройство сохраняет сеть "' +
       ssid +
       '" и подключается.',
-      'Эта страница сама откроет http://' +
-      host +
-      ', когда устройство подключится.',
+      'Эта страница сама откроется, когда устройство подключится.',
       true
     );
 
@@ -6970,9 +7029,16 @@ $('btnConnect').onclick =
 
     let dead = 0;  // подряд неотвеченных опросов: AP выключился
 
-    const goLocal = ()=>{
+    /* переход на устройство. ip — если успели узнать (прошивка держит
+       AP открытым 6с после коннекта ровно затем, чтобы отдать его),
+       иначе mDNS-имя: на Android .local не резолвится, поэтому IP —
+       основной путь (см. net.cpp PORTAL_GRACE_MS) */
+    const goLocal = ip=>{
       clearInterval(iv);
-      location.href = 'http://' + host + '/';
+      location.href =
+        ip
+          ? 'http://' + ip + '/'
+          : 'http://' + host + '/';
     };
 
     const iv =
@@ -6989,26 +7055,13 @@ $('btnConnect').onclick =
             if(
               s.sta &&
               s.sta.connected &&
-              !s.portal
+              s.sta.ip
             ){
-              /* устройство в домашней сети — уходим с умирающего 192.168.4.1 */
-              goLocal();
-            }
-
-            if(
-              s.portal &&
-              !s.wifiConfigured
-            ){
-              clearInterval(iv);
-
-              overlayMsg(
-                'Не удалось',
-                'Не удалось подключиться к "' +
-                ssid +
-                '". Проверьте пароль и попробуйте снова.',
-                '',
-                false
-              );
+              /* STA поднялась — уходим СРАЗУ и по IP, не дожидаясь
+                 закрытия портала: grace-окно живёт 6с, следующий
+                 опрос (2.5с) может уже не пройти */
+              goLocal(s.sta.ip);
+              return;
             }
 
             if(
@@ -7016,22 +7069,24 @@ $('btnConnect').onclick =
               s.wifiConfigured &&
               Date.now()-t0 > 15000
             ){
+              /* 15с — срок STA-попытки из портала (retryAt в net.cpp):
+                 сеть не приняла. AP жив, страница открыта — говорим
+                 почему не вышло (reason приходит в s.sta.disconnect) */
               clearInterval(iv);
 
               overlayMsg(
                 'Не удалось подключиться',
-                'Проверьте пароль сети "' +
-                ssid +
-                '" и попробуйте снова.',
+                wifiFailText(),
                 '',
                 false
               );
             }
 
           }catch(e){
-            /* 192.168.4.1 не отвечает: AP погас после подключения, телефон
-               возвращается в домашнюю сеть. Даём устройству время подняться
-               и уходим на mDNS-имя, которое живёт уже в домашней сети */
+            /* 192.168.4.1 не отвечает: AP погас после подключения,
+               телефон возвращается в домашнюю сеть. Даём устройству
+               время подняться и уходим на mDNS-имя, которое живёт
+               уже в домашней сети */
             dead++;
 
             if(dead >= 2 && Date.now()-t0 >= 20000)
