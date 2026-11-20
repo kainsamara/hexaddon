@@ -376,12 +376,21 @@ static void onStaDisconnected(WiFiEvent_t, WiFiEventInfo_t info) {
 //      is ours; a mismatch just fails the assoc and we retry later.
 // Blocking (~2s over all channels), called from netLoop only, throttled.
 static uint32_t directedNextAt = 0;
+// directed windows spent since the last success / portal. While failures
+// are environmental (NO_AP_FOUND / BEACON_TIMEOUT — hidden APs, a router
+// rebooting) the portal lets the directed fallback chain up to
+// DIRECTED_MAX_TRIES windows before it may win; credential failures
+// (4WAY_HANDSHAKE_TIMEOUT etc.) never chain — a wrong password must not
+// hold the portal hostage.
+#define DIRECTED_MAX_TRIES 3
+static uint8_t directedTries = 0;
 static void tryDirectedConnect() {
   if (!settings.wifiSsid.length()) return;
   // a web-side /api/networks scan may own the radio right now: our sync
   // scan would bounce off the core's SCANNING bit and waste this attempt —
   // come back on the next netLoop pass instead (no throttle bump)
   if (WiFi.scanComplete() == WIFI_SCAN_RUNNING) return;
+  directedTries++;  // every real attempt spends one of the chained windows
   Serial.printf("[net] fallback scan for \"%s\" (hidden incl.)\n",
                 settings.wifiSsid.c_str());
   // stop the auto-retry carousel first: it owns the radio, and a scan
@@ -412,6 +421,16 @@ static void tryDirectedConnect() {
     WiFi.begin(settings.wifiSsid.c_str(), settings.wifiPass.c_str(),
                WiFi.channel(best), WiFi.BSSID(best));
     tConnect = millis();
+    // The failures that triggered this fallback burned the portal guard's
+    // budget (failCount >= 10 / 20 s timeout) on the NAIVE connect path.
+    // Without a reset, the very next netLoop pass (throttle closed,
+    // failCount still >= 10, timeout long since fired) runs startPortal()
+    // and murders this association mid handshake — the "hidden AP
+    // sometimes falls to the portal" bug. The directed attempt gets a
+    // budget of its own: counters from zero and a fresh 20 s clock
+    // (connecting=true switches the timeout to the tConnect base).
+    failCount = 0;
+    connecting = true;
   } else {
     // neither a named record nor a blank-SSID beacon: wrong SSID (it is
     // CASE-SENSITIVE), the AP is off, or it is 5 GHz-only
@@ -454,6 +473,7 @@ static void startPortal() {
   apFailed = !ap;
   retryAt = 0;
   failCount = 0;
+  directedTries = 0;  // portal-side retries start with a clean chain budget
   tConnect = millis();
   txApplyCeiling();  // mode switch to AP: the PHY limit must survive it
   Serial.printf("[net] setup portal: \"%s\" ip=%s ap=%s ch=%d\n", apSsid.c_str(),
@@ -561,6 +581,7 @@ void netLoop() {
     lastConn = millis();
     lastDisc = 0;  // stale reason must not surface after a success
     failCount = 0;
+    directedTries = 0;  // a fresh drop starts the directed chain over
     {
       // DHCP may hand out a DIFFERENT lease after a reconnect (ours rides
       // the fallback path) — a silent IP change looks exactly like "the
@@ -679,11 +700,19 @@ void netLoop() {
       if (!portal) {
         bool timeout = (connecting && millis() - tConnect > 20000) ||
                        (!connecting && lastConn && millis() - lastConn > 20000);
+        // Hidden AP / dead air (router rebooting, weak signal):
+        // NO_AP_FOUND and BEACON_TIMEOUT chain up to DIRECTED_MAX_TRIES
+        // directed windows (~90 s of fighting) before the portal may win.
+        // Credential failures (4WAY...) never chain — a typo'd password
+        // must reach the portal on the first window.
+        bool environmental = lastDisc == WIFI_REASON_BEACON_TIMEOUT ||
+                             lastDisc == WIFI_REASON_NO_AP_FOUND;
         if (failCount >= 3 && (int32_t)(millis() - directedNextAt) >= 0) {
           // hidden AP / stubborn NO_AP_FOUND: probe for the exact SSID
           // and connect by BSSID before giving up to the portal
           tryDirectedConnect();
-        } else if (failCount >= 10 || timeout) {
+        } else if ((failCount >= 10 || timeout) &&
+                   !(environmental && directedTries < DIRECTED_MAX_TRIES)) {
           // 10 rejected attempts or 20s of silence -> full portal (AP only,
           // STA off): the beacon is rock stable, phones always see it
           startPortal();
